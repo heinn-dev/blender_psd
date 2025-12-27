@@ -1,0 +1,21 @@
+
+schema_version = "1.0.0"
+
+id = "blender_psd"
+version = "1.0.0"
+name = "BlenderPSD"
+tagline = "test"
+maintainer = "heinn"
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+type = "add-on"
+
+platforms = ["windows-x64"]
+wheels = [
+    "wheels/photoshopapi-0.8.0-cp311-cp311-win_amd64.whl",
+    "wheels/pillow-12.0.0-cp311-cp311-win_amd64.whl"
+]
+
+
+[build]
+paths = ["wheels/*.whl"]
