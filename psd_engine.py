@@ -22,12 +22,25 @@ def read_file(path):
         
         is_group = isinstance(layer, psapi.GroupLayer_8bit)
         
+        match layer:
+            case psapi.GroupLayer_8bit():
+                layer_type = "GROUP"
+                is_group = True
+
+            case psapi.SmartObjectLayer_8bit():
+                layer_type = "SMART"
+                is_group = False
+
+            case _:
+                layer_type = "LAYER"
+                is_group = False
+        
         has_mask = layer.has_mask()
 
         node = {
             "name": layer_name,
             "path": full_path,
-            "type": "GROUP" if is_group else "LAYER",
+            "type": layer_type,
             "has_mask": has_mask,
             "children": []
         }

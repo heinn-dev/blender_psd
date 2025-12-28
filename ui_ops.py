@@ -225,7 +225,6 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
         # 3. Cleanup
         if success:
             for img in processed_images:
-                img.is_dirty = False
                 img.reload() # Optional: Reloads to ensure hash sync, though usually not needed if pixels matched
             self.report({'INFO'}, "Successfully saved all layers.")
             return {'FINISHED'}

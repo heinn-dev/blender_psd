@@ -54,8 +54,12 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
     bl_label = "Connect"
 
     def execute(self, context):
+        
         props = context.scene.bpsd_props
         path = props.active_psd_path
+        
+        # file = psd_engine.read_file(path)
+        # return {'FINISHED'}
         
         # 1. Read
         tree_data,w,h = psd_engine.read_file(path)
@@ -91,9 +95,6 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             
             if node['children']:
                 self.flatten_tree(node['children'], collection, indent + 1)
-
-
-
 
 # --- REGISTRATION ---
 
