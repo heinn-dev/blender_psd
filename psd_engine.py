@@ -62,6 +62,8 @@ def read_layer(psd_path, layer_path, target_w , target_h , fetch_mask=False):
         layered_file = psapi.LayeredFile.read(psd_path)
         layer = layered_file.find_layer(layer_path)
         
+        print(f"Dimensions : {layer.width}, {layer.height}, Position {layer.center_x, layer.center_y}")
+        
         if not layer:
             return None, 0, 0
 
@@ -160,12 +162,13 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, width, heigh
             2: pixels[:, :, 2],
             -1: pixels[:, :, 3]
         }
-        layer.set_image_data(new_data)
+        
+        layer.set_image_data(new_data, width = width, height = height)
 
     return True
 
 def write_all_layers(psd_path, updates):
-    try:
+    # try:
         layered_file = psapi.LayeredFile.read(psd_path)
         
         layers_updated_count = 0
@@ -186,6 +189,6 @@ def write_all_layers(psd_path, updates):
             print("No valid layers were found to update.")
             return False
 
-    except Exception as e:
-        print(f"BPSD Batch Save Error on layer {layer_path} : {e}")
-        return False
+    # except Exception as e:
+    #     print(f"BPSD Batch Save Error on layer {layer_path} : {e}")
+    #     return False
