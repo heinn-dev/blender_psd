@@ -23,6 +23,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row.operator("bpsd.save_all_layers", text="Save All Changes", icon='FILE_TICK')
             
             row.prop(props, "auto_refresh_ps", text="", icon='FILE_REFRESH')
+            row.operator("bpsd.reload_all", text="Reload All", icon='FILE_REFRESH')
             
             row = col.row(align=True)
             row.operator("bpsd.clean_orphans", text="Purge Old Layers", icon='TRASH')

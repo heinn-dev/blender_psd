@@ -108,6 +108,8 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
         if props.auto_purge:
             bpy.ops.bpsd.clean_orphans('EXEC_DEFAULT')
         
+        bpy.ops.bpsd.reload_all('EXEC_DEFAULT')
+        
         self.report({'INFO'}, "Connected!")
         return {'FINISHED'}
 
@@ -126,8 +128,6 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
 
 # --- REGISTRATION ---
 
-
-
 classes = (
     BPSD_LayerItem,
     BPSD_SceneProperties,
@@ -137,6 +137,7 @@ classes = (
     ui_ops.BPSD_OT_save_layer,
     ui_ops.BPSD_OT_save_all_layers,
     ui_ops.BPSD_OT_clean_orphans,
+    ui_ops.BPSD_OT_reload_all,
     panels.BPSD_PT_main_panel,
     panels.BPSD_PT_layer_context,
     BPSDPreferences

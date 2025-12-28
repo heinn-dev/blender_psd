@@ -314,3 +314,60 @@ class BPSD_OT_clean_orphans(bpy.types.Operator):
             
         self.report({'INFO'}, f"Removed {count} orphaned images.")
         return {'FINISHED'}
+    
+class BPSD_OT_reload_all(bpy.types.Operator):
+    bl_idname = "bpsd.reload_all"
+    bl_label = "Reload Loaded Layers"
+    bl_description = "Force re-read all currently loaded textures from the PSD"
+    
+    def execute(self, context):
+        props = context.scene.bpsd_props
+        active_psd = props.active_psd_path
+        
+        # 1. Identify which images need reloading
+        images_to_reload = []
+        requests = []
+        
+        for img in bpy.data.images:
+            if img.get("psd_path") != active_psd: continue
+            if not img.get("bpsd_managed"): continue
+            
+            # We use the existing image dimensions as the target
+            # (Assuming the PSD canvas size hasn't changed. 
+            # If it has, user should probably re-connect first to update props)
+            l_path = img.get("psd_layer_path")
+            is_mask = img.get("psd_is_mask", False)
+            
+            images_to_reload.append(img)
+            requests.append({
+                'layer_path': l_path,
+                'width': img.size[0],
+                'height': img.size[1],
+                'is_mask': is_mask
+            })
+            
+        if not requests:
+            self.report({'INFO'}, "No layers to reload.")
+            return {'CANCELLED'}
+            
+        # 2. Batch Read
+        self.report({'INFO'}, f"Reloading {len(requests)} layers...")
+        results = psd_engine.read_all_layers(active_psd, requests)
+        
+        # 3. Update Blender Images
+        success_count = 0
+        for img in images_to_reload:
+            key = (img["psd_layer_path"], img.get("psd_is_mask", False))
+            
+            if key in results:
+                try:
+                    img.pixels = results[key]
+                    img.update()
+                    # Reset dirty flag since we just synced with disk
+                    img.is_dirty = False 
+                    success_count += 1
+                except Exception as e:
+                    print(f"Failed to update image {img.name}: {e}")
+        
+        self.report({'INFO'}, f"Reloaded {success_count} layers.")
+        return {'FINISHED'}

@@ -4,7 +4,6 @@ import numpy as np
 
 import photoshopapi as psapi
 
-
 def read_file(path):
     
     try:
@@ -56,98 +55,111 @@ def read_file(path):
         print(f"BPSD Engine Error (Read Structure): {e}")
         return []
 
+# --- HELPER: Internal Read Logic (Refactored) ---
+def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mask):
+    """
+    Internal function that assumes layered_file is already open.
+    """
+    layer = layered_file.find_layer(layer_path)
+    if not layer: return None
+
+    # --- MASK PATH ---
+    if fetch_mask:
+        canvas = np.full((target_h, target_w), 255, dtype=np.uint8)
+        
+        try:
+            mask_arr = layer.mask
+        except:
+            mask_arr = None
+
+        if mask_arr is not None and mask_arr.size > 0:
+            mh, mw = mask_arr.shape
+            center_x = layer.mask_position.x
+            center_y = layer.mask_position.y
+            mask_left = int(center_x - (mw / 2))
+            mask_top = int(center_y - (mh / 2))
+            
+            paste_to_canvas(canvas, mask_arr, target_w, target_h, mask_left, mask_top)
+        
+        canvas = np.flipud(canvas)
+        ones = np.full_like(canvas, 255)
+        img_stack = np.stack([canvas, canvas, canvas, ones], axis=-1)
+        return (img_stack.astype(np.float32) / 255.0).flatten()
+
+    # --- COLOR PATH ---
+    else:
+        planar_data = layer.get_image_data()
+        if not planar_data:
+            return np.zeros(target_w * target_h * 4, dtype=np.float32)
+
+        first_key = next(iter(planar_data))
+        dtype = planar_data[first_key].dtype
+
+        c_r = np.zeros((target_h, target_w), dtype=dtype)
+        c_g = np.zeros((target_h, target_w), dtype=dtype)
+        c_b = np.zeros((target_h, target_w), dtype=dtype)
+        c_a = np.zeros((target_h, target_w), dtype=dtype)
+
+        l_w = layer.width
+        l_h = layer.height
+        layer_left = int(layer.center_x - (l_w / 2))
+        layer_top = int(layer.center_y - (l_h / 2))
+
+        if 0 in planar_data: paste_to_canvas(c_r, planar_data[0], target_w, target_h, layer_left, layer_top)
+        if 1 in planar_data: paste_to_canvas(c_g, planar_data[1], target_w, target_h, layer_left, layer_top)
+        if 2 in planar_data: paste_to_canvas(c_b, planar_data[2], target_w, target_h, layer_left, layer_top)
+        
+        if -1 in planar_data:
+            paste_to_canvas(c_a, planar_data[-1], target_w, target_h, layer_left, layer_top)
+        else:
+            opaque_block = np.full((l_h, l_w), 255, dtype=dtype)
+            paste_to_canvas(c_a, opaque_block, target_w, target_h, layer_left, layer_top)
+
+        img_stack = np.stack([c_r, c_g, c_b, c_a], axis=-1)
+        img_stack = np.flipud(img_stack)
+        
+        return (img_stack.astype(np.float32) / 255.0).flatten()
+
+# --- EXISTING FUNCTIONS (Simplified wrappers) ---
+
 def read_layer(psd_path, layer_path, target_w, target_h, fetch_mask=False):
-    
     try:
         layered_file = psapi.LayeredFile.read(psd_path)
-        layer = layered_file.find_layer(layer_path)
-        
-        if not layer: return None, 0, 0
-
-        # --- MASK READING ---
-        if fetch_mask:
-            # 1. Create Blank White Canvas (Opaque)
-            canvas = np.full((target_h, target_w), 255, dtype=np.uint8)
-            
-            # 2. Check if Mask Exists
-            try:
-                # Some groups report has_mask=True but might fail getting data if empty
-                mask_arr = layer.mask
-            except:
-                mask_arr = None
-
-            if mask_arr is not None and mask_arr.size > 0:
-                mh, mw = mask_arr.shape
-                
-                # Calculate Top-Left from Center
-                center_x = layer.mask_position.x
-                center_y = layer.mask_position.y
-                mask_left = int(center_x - (mw / 2))
-                mask_top = int(center_y - (mh / 2))
-                
-                # Paste
-                paste_to_canvas(canvas, mask_arr, target_w, target_h, mask_left, mask_top)
-            
-            # 3. Finalize
-            canvas = np.flipud(canvas)
-            ones = np.full_like(canvas, 255)
-            img_stack = np.stack([canvas, canvas, canvas, ones], axis=-1)
-            return (img_stack.astype(np.float32) / 255.0).flatten(), target_w, target_h
-
-        # --- COLOR READING ---
-        else:
-            planar_data = layer.get_image_data()
-            if not planar_data:
-                # Completely Empty Layer? Return Transparent
-                return np.zeros(target_w * target_h * 4, dtype=np.float32), target_w, target_h
-
-            # 1. Determine safe dtype
-            first_key = next(iter(planar_data))
-            dtype = planar_data[first_key].dtype
-
-            # 2. Initialize Full Canvas Channels
-            # R,G,B default to 0 (Black). Alpha defaults to 0 (Transparent).
-            c_r = np.zeros((target_h, target_w), dtype=dtype)
-            c_g = np.zeros((target_h, target_w), dtype=dtype)
-            c_b = np.zeros((target_h, target_w), dtype=dtype)
-            c_a = np.zeros((target_h, target_w), dtype=dtype)
-
-            # 3. Calculate Offsets
-            # Layer coordinates are also center-based or top-left based depending on API
-            # Assuming consistency with Mask, we use center logic if available, else standard left/top
-            l_w = layer.width
-            l_h = layer.height
-            
-            # Using Center provides better sub-pixel conversion if API uses floats
-            layer_left = int(layer.center_x - (l_w / 2))
-            layer_top = int(layer.center_y - (l_h / 2))
-
-            # 4. Paste Channels
-            if 0 in planar_data: paste_to_canvas(c_r, planar_data[0], target_w, target_h, layer_left, layer_top)
-            if 1 in planar_data: paste_to_canvas(c_g, planar_data[1], target_w, target_h, layer_left, layer_top)
-            if 2 in planar_data: paste_to_canvas(c_b, planar_data[2], target_w, target_h, layer_left, layer_top)
-            
-            # Alpha Handling
-            if -1 in planar_data:
-                paste_to_canvas(c_a, planar_data[-1], target_w, target_h, layer_left, layer_top)
-            else:
-                # If layer has RGB but NO Alpha channel, it implies opacity...
-                # BUT only within the layer bounds. 
-                # So we create a temporary opaque block and paste THAT into the alpha canvas.
-                opaque_block = np.full((l_h, l_w), 255, dtype=dtype)
-                paste_to_canvas(c_a, opaque_block, target_w, target_h, layer_left, layer_top)
-
-            # 5. Stack & Flip
-            img_stack = np.stack([c_r, c_g, c_b, c_a], axis=-1)
-            img_stack = np.flipud(img_stack)
-            
-            return (img_stack.astype(np.float32) / 255.0).flatten(), target_w, target_h
-
+        flat_data = _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mask)
+        if flat_data is None: return None, 0, 0
+        return flat_data, target_w, target_h
     except Exception as e:
-        print(f"BPSD Engine Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"BPSD Read Error: {e}")
         return None, 0, 0
+
+# --- NEW BATCH FUNCTION ---
+
+def read_all_layers(psd_path, requests):
+    """
+    Batch reads multiple layers.
+    requests: list of dicts {'layer_path', 'width', 'height', 'is_mask'}
+    Returns: dict { (layer_path, is_mask): flat_pixels }
+    """
+    results = {}
+    try:
+        layered_file = psapi.LayeredFile.read(psd_path)
+        
+        for req in requests:
+            path = req['layer_path']
+            w = req['width']
+            h = req['height']
+            mask = req['is_mask']
+            
+            pixels = _read_layer_internal(layered_file, path, w, h, mask)
+            
+            if pixels is not None:
+                # Key the result by path AND type so we can map it back easily
+                results[(path, mask)] = pixels
+                
+        return results
+    except Exception as e:
+        print(f"BPSD Batch Read Error: {e}")
+        return {}
 
 def paste_to_canvas(canvas, source_arr, canvas_w, canvas_h, offset_x, offset_y):
     """
