@@ -37,29 +37,40 @@ def run_photoshop_refresh(target_psd_path):
     # 1. Get Settings
     addon_prefs = bpy.context.preferences.addons[__package__].preferences
     ps_exe = addon_prefs.photoshop_exe_path
+    ahk_exe = addon_prefs.ahk_exe_path
     
-    # 2. Paths
+    # 2. Define Paths
     current_dir = os.path.dirname(__file__)
-    script_path = os.path.join(current_dir, "refresh.jsx")
+    
+    # The files we created
+    ahk_launcher = os.path.join(current_dir, "launcher.ahk")
+    jsx_script = os.path.join(current_dir, "refresh.jsx")
     data_path = os.path.join(current_dir, "bpsd_target.txt")
     
     if not os.path.exists(ps_exe):
-        print("BPSD: Photoshop executable not found.")
+        print("BPSD Error: Photoshop executable not found.")
         return
 
-    # 3. Write the Sidecar File (Data)
+    # 3. Write the Sidecar Data (same as before)
     try:
         with open(data_path, "w", encoding="utf-8") as f:
             f.write(target_psd_path)
     except Exception as e:
-        print(f"BPSD: Could not write param file: {e}")
+        print(f"BPSD Error: Could not write param file: {e}")
         return
         
-    # 4. Run the Static Script (Code)
+    # 4. RUN THE AHK WRAPPER
+    # Command: AutoHotkey.exe "launcher.ahk" "Photoshop.exe" "refresh.jsx"
     try:
-        subprocess.Popen([ps_exe, script_path])
+        subprocess.Popen([
+            ahk_exe, 
+            ahk_launcher, 
+            ps_exe, 
+            jsx_script
+        ])
     except Exception as e:
-        print(f"BPSD: Failed to launch Photoshop: {e}")
+        print(f"BPSD Error: Failed to launch AHK: {e}")
+        print("Make sure AutoHotkey is installed and in your System PATH.")
 
 # --- SELECTION OPERATOR ---
 class BPSD_OT_select_layer(bpy.types.Operator):

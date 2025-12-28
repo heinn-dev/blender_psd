@@ -1,73 +1,63 @@
-
-
 import bpy
 import os
 import numpy as np
 
 import photoshopapi as psapi
 
-# --- FUNCTIONAL ENGINE ---
 
 def read_file(path):
-    """
-    Opens the PSD and returns a recursive dictionary tree of the structure.
-    """
-
-    layered_file = psapi.LayeredFile.read(path)
     
-    def parse_layer_structure(layer, current_path=""):
-        # Construct path (e.g., "Group/Layer")
-        layer_name = layer.name
-        full_path = f"{current_path}/{layer_name}" if current_path else layer_name
+    try:
+        layered_file = psapi.LayeredFile.read(path)
         
-        is_group = isinstance(layer, psapi.GroupLayer_8bit)
+        def parse_layer_structure(layer, current_path=""):
+            layer_name = layer.name
+            full_path = f"{current_path}/{layer_name}" if current_path else layer_name
+            
+            is_group = isinstance(layer, psapi.GroupLayer_8bit)
+            
+            match layer:
+                case psapi.GroupLayer_8bit():
+                    layer_type = "GROUP"
+                    is_group = True
+
+                case psapi.SmartObjectLayer_8bit():
+                    layer_type = "SMART"
+                    is_group = False
+
+                case _:
+                    layer_type = "LAYER"
+                    is_group = False
+            
+            has_mask = layer.has_mask()
+
+            node = {
+                "name": layer_name,
+                "path": full_path,
+                "type": layer_type,
+                "has_mask": has_mask,
+                "children": []
+            }
+            
+            if is_group:
+                for child in layer.layers:
+                    node["children"].append(parse_layer_structure(child, full_path))
+                    
+            return node
+
+        structure = []
         
-        match layer:
-            case psapi.GroupLayer_8bit():
-                layer_type = "GROUP"
-                is_group = True
+        for layer in layered_file.layers:
+            structure.append(parse_layer_structure(layer))
+            
+        return structure, layered_file.width, layered_file.height
 
-            case psapi.SmartObjectLayer_8bit():
-                layer_type = "SMART"
-                is_group = False
-
-            case _:
-                layer_type = "LAYER"
-                is_group = False
-        
-        has_mask = layer.has_mask()
-
-        node = {
-            "name": layer_name,
-            "path": full_path,
-            "type": layer_type,
-            "has_mask": has_mask,
-            "children": []
-        }
-        
-        if is_group:
-            for child in layer.layers:
-                node["children"].append(parse_layer_structure(child, full_path))
-                
-        return node
-
-    structure = []
-    
-    for layer in layered_file.layers:
-        structure.append(parse_layer_structure(layer))
-        
-    return structure, layered_file.width, layered_file.height
-
-    # except Exception as e:
-        # print(f"BPSD Engine Error (Read Structure): {e}")
-        # return []
+    except Exception as e:
+        print(f"BPSD Engine Error (Read Structure): {e}")
+        return []
 
 def read_layer(psd_path, layer_path, target_w , target_h , fetch_mask=False):
-    """
-    Reads a specific layer's pixels.
-    If fetching a mask, uses 'mask_position' (Center) to composite it 
-    correctly onto a white canvas matching the color layer's dimensions.
-    """
+    
     try:
         layered_file = psapi.LayeredFile.read(psd_path)
         layer = layered_file.find_layer(layer_path)
@@ -79,7 +69,6 @@ def read_layer(psd_path, layer_path, target_w , target_h , fetch_mask=False):
         layer_left = 0
         layer_top = 0
 
-        # --- MASK PATH ---
         if fetch_mask:
             canvas = np.full((target_h, target_w), 255, dtype=np.uint8)
             mask_arr = layer.mask
@@ -120,7 +109,6 @@ def read_layer(psd_path, layer_path, target_w , target_h , fetch_mask=False):
             return flat_pixels, target_w, target_h
 
         else:
-            # I think blank layers have no data by default?
             planar_data = layer.get_image_data()
             
             r = planar_data[0] if 0 in planar_data else np.full((target_h, target_w), 255, dtype=np.uint8)
@@ -140,6 +128,7 @@ def read_layer(psd_path, layer_path, target_w , target_h , fetch_mask=False):
         return None, 0, 0
 
 def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False):
+    
     layered_file = psapi.LayeredFile.read(psd_path)
     write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask)
     layered_file.write(psd_path)
@@ -176,13 +165,12 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, width, heigh
     return True
 
 def write_all_layers(psd_path, updates):
-    # try:
+    try:
         layered_file = psapi.LayeredFile.read(psd_path)
         
         layers_updated_count = 0
         for data in updates:
             layer_path = data['layer_path']
-            last_layer = layer_path
             width = data['width']
             height = data['height']
             is_mask = data['is_mask']
@@ -198,6 +186,6 @@ def write_all_layers(psd_path, updates):
             print("No valid layers were found to update.")
             return False
 
-    # except Exception as e:
-        # print(f"BPSD Batch Save Error on layer {last_layer}: {e}")
-        # return False
+    except Exception as e:
+        print(f"BPSD Batch Save Error on layer {layer_path} : {e}")
+        return False

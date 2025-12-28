@@ -63,6 +63,13 @@ class BPSDPreferences(bpy.types.AddonPreferences):
         subtype='FILE_PATH',
         default=r"C:\Program Files\Adobe\Adobe Photoshop 2023\Photoshop.exe" # Common default
     ) # type: ignore
+    
+    ahk_exe_path: bpy.props.StringProperty(
+        name="AHK Executable",
+        description="Path to AutoHotkey.exe",
+        subtype='FILE_PATH',
+        default=r"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" # Common default
+    ) # type: ignore
 
     def draw(self, context):
         layout = self.layout

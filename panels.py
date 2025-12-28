@@ -29,7 +29,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             
         layout.separator()
 
-        # 2. Nested Box Tree
         if len(props.layer_list) == 0:
             return
 
@@ -38,7 +37,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
         for i, item in enumerate(props.layer_list):
 
-            # --- HANDLE INDENT REDUCTION ---
             if item.indent < current_indent:
                 for _ in range(current_indent - item.indent):
                     if len(layout_stack) > 1:
@@ -48,20 +46,17 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
             parent_layout = layout_stack[-1]
 
-            # --- GROUPS CREATE THEIR OWN BOX ---
             if item.layer_type == "GROUP":
                 box = parent_layout.box()
                 current_layout = box.column(align=True)
             else:
                 current_layout = parent_layout
 
-            # --- DRAW MAIN ROW ---
             row = current_layout.row(align=True)
             row.alignment = 'LEFT'
 
             is_active_row = (i == props.active_layer_index)
 
-            # Icon selection
             if item.layer_type == "GROUP":
                 icon = 'FILE_FOLDER'
             elif item.layer_type == "SMART":
@@ -71,10 +66,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
             if item.layer_type in {"GROUP", "SMART"}:
                 row.label(text=item.name, icon=icon)
-                # row.alignment = 'LEFT'                
-                # sub = row.row(align=True)
-                # sub.enabled = False
-                # sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False)
             else:
                 layer_sub = row.row(align=True)
                 layer_sub.alert = (is_active_row and not props.active_is_mask)
@@ -107,7 +98,7 @@ class BPSD_PT_layer_context(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'BPSD'
-    bl_parent_id = "BPSD_PT_main_panel" # Nest under main
+    bl_parent_id = "BPSD_PT_main_panel"
     
     @classmethod
     def poll(cls, context):
@@ -123,11 +114,9 @@ class BPSD_PT_layer_context(bpy.types.Panel):
         
         box = layout.box()
         
-        # Load Buttons
         row = box.row()
-        op = row.operator("bpsd.load_layer", text="Load Texture", icon='TEXTURE')
+        op = row.operator("bpsd.load_layer", text="Force Load", icon='TEXTURE')
         op.layer_path = item.path
         
-        # Save Button (Explicit)
         row = box.row()
         op = row.operator("bpsd.save_layer", text="Force Save", icon='FILE_TICK')

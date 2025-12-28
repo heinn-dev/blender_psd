@@ -26,7 +26,7 @@ try {
 
 } catch(e) {
     // Fail silently or alert for debugging
-    // alert("BPSD Error: " + e);
+    alert("BPSD Error: " + e);
 }
 
 function refreshDocument(pathStr) {
