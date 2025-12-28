@@ -108,7 +108,6 @@ class BPSD_PT_layer_context(bpy.types.Panel):
         row = box.row()
         op = row.operator("bpsd.load_layer", text="Load Texture", icon='TEXTURE')
         op.layer_path = item.path
-        op.load_mask = props.active_is_mask
         
         # Save Button (Explicit)
         row = box.row()

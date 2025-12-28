@@ -55,7 +55,7 @@ def read_file(path):
         # print(f"BPSD Engine Error (Read Structure): {e}")
         # return []
 
-def read_layer(psd_path, layer_path, fetch_mask=False):
+def read_layer(psd_path, layer_path, fetch_mask):
     """
     Reads a specific layer's pixels.
     Returns: (flat_float_pixels, width, height) tuple for Blender.
@@ -68,28 +68,35 @@ def read_layer(psd_path, layer_path, fetch_mask=False):
             print(f"Layer not found: {layer_path}")
             return None, 0, 0
         
+        # both a mask and a layer could be straight up empty if they have no pixels in it
+        
+        # a group can have mask data, but no image data...
+        # make it use .mask later
         is_group = isinstance(layer, psapi.GroupLayer_8bit)
 
-        # a group can have mask data, but no image data...
         # Get Data
         planar_data = layer.get_image_data()
         if not planar_data: return None, 0, 0
 
         h, w = planar_data[0].shape
         
+        print("Trying to load layer" + layer_path + "... fetch mask : " + str(fetch_mask) + " has mask? " + str(-2 in planar_data.keys()))
+        
         # Mask is channel -2
-        mask = None
-        if -2 in planar_data:
+        if fetch_mask: #and -2 in planar_data.keys(): # let's just assume this ough
+            w = layer.mask_width()
+            h = layer.mask_height()
             mask_arr = planar_data[-2]
             mask_arr = np.flipud(mask_arr)
             
-            # ough.....
             # Expand mask to RGBA for visualization (White mask, opaque alpha)
             # or just R=G=B=Mask
             ones = np.full_like(mask_arr, 255)
             img_stack = np.stack([mask_arr, mask_arr, mask_arr, ones], axis=-1)
             
-            mask = (img_stack.astype(np.float32) / 255.0).flatten()
+            flat_pixels = (img_stack.astype(np.float32) / 255.0).flatten()
+            print("huh?")
+            return flat_pixels, w, h
             
             
         r = planar_data[0]
@@ -105,7 +112,7 @@ def read_layer(psd_path, layer_path, fetch_mask=False):
         img_stack = np.flipud(img_stack)
         
         flat_pixels = (img_stack.astype(np.float32) / 255.0).flatten()
-        return flat_pixels, mask, w, h
+        return flat_pixels, w, h
 
     except Exception as e:
         print(f"BPSD Engine Error (Read Layer): {e}")

@@ -87,7 +87,7 @@ class BPSD_OT_load_layer(bpy.types.Operator):
             return {'CANCELLED'}
 
         # 2. Call Engine
-        pixels, mask, w, h = psd_engine.read_layer(psd_path, target_layer, fetch_mask=is_mask)
+        pixels, w, h = psd_engine.read_layer(psd_path, target_layer, fetch_mask=is_mask)
         
         if pixels is None:
             self.report({'ERROR'}, "Failed to read layer.")
