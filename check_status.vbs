@@ -25,3 +25,4 @@ On Error Resume Next
 On Error GoTo 0
 
 WScript.StdOut.Write isUnsaved
+

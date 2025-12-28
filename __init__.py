@@ -229,7 +229,8 @@ def auto_sync_check():
             props.last_known_mtime_str = str(current_mtime)
             
             if context.window:
-                bpy.ops.bpsd.reload_all('EXEC_DEFAULT')
+                # bpy.ops.bpsd.reload_all('EXEC_DEFAULT')
+                bpy.ops.bpsd.connect_psd('EXEC_DEFAULT')
                 
     except Exception as e:
         print(f"BPSD Watcher Error: {e}")
@@ -263,7 +264,7 @@ def register():
     # wm = bpy.context.window_manager
     # kc = wm.keyconfigs.addon
     # if kc:
-    #     km = kc.keymaps.new(name='Image Generic', space_type='IMAGE_EDITOR')
+    #     km = kc.keymaps.new(name='Image Generic', space_typfe='IMAGE_EDITOR')
         
     #     # uggh.... I don't remember if this respects anything about masks.
     #     # Bind Ctrl+S to OUR operator

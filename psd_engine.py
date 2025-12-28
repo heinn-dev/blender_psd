@@ -112,7 +112,7 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
         if -1 in planar_data:
             paste_to_canvas(c_a, planar_data[-1], target_w, target_h, layer_left, layer_top)
         else:
-            opaque_block = np.full((l_h, l_w), 255, dtype=dtype)
+            opaque_block = np.full((l_h, l_w), 0, dtype=dtype) #transparent by default
             paste_to_canvas(c_a, opaque_block, target_w, target_h, layer_left, layer_top)
 
         img_stack = np.stack([c_r, c_g, c_b, c_a], axis=-1)
@@ -135,11 +135,6 @@ def read_layer(psd_path, layer_path, target_w, target_h, fetch_mask=False):
 # --- NEW BATCH FUNCTION ---
 
 def read_all_layers(psd_path, requests):
-    """
-    Batch reads multiple layers.
-    requests: list of dicts {'layer_path', 'width', 'height', 'is_mask'}
-    Returns: dict { (layer_path, is_mask): flat_pixels }
-    """
     results = {}
     try:
         layered_file = psapi.LayeredFile.read(psd_path)
@@ -249,57 +244,43 @@ def write_all_layers(psd_path, updates):
         return False
 
 def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask):
-    """
-    Updates the layer by "stamping" the Blender Canvas onto the existing Layer data.
-    Preserves layer size and position.
-    """
     layer = layered_file.find_layer(layer_path)
     if not layer: return False
 
-    # 1. Parse Blender Data (The Canvas)
+    # 1. Parse Blender Data
     pixels = np.array(blender_pixels).reshape((canvas_h, canvas_w, 4))
-    pixels = np.flipud(pixels) # Flip to match Top-Left origin
+    pixels = np.flipud(pixels)
     pixels = (pixels * 255).astype(np.uint8)
 
-    # 2. Get Existing Layer Geometry
-    # We need to know where the layer is to calculate the overlap
+    # --- MASK PATH ---
     if is_mask:
         try:
-            # Mask Coordinates (Center)
-            cx, cy = layer.mask_position.x, layer.mask_position.y
+            # STRATEGY CHANGE: Force Full Canvas for Masks.
+            # Photoshop auto-crops masks, making them too small to "Stamp" into 
+            # if we paint new areas in Blender.
+            # We simply replace the mask with the full Blender Canvas to ensure
+            # all strokes are captured.
             
-            # We need the existing mask data to know its size
-            # If the layer has no mask, we can't "update" it in place easily 
-            # without assuming we create a new one matching canvas.
-            if not layer.has_mask():
-                # Fallback: Create new mask matching canvas exactly
-                layer.mask = pixels[:, :, 0]
-                layer.mask_position = psapi.geometry.Point2D(canvas_w/2, canvas_h/2)
-                return True
-                
-            current_arr = layer.mask
-            h, w = current_arr.shape
+            mask_data = pixels[:, :, 0] # Red Channel as Mask
             
-            # Calculate Top-Left
-            layer_left = int(cx - (w / 2))
-            layer_top = int(cy - (h / 2))
+            # This automatically resizes the mask buffer to match our data
+            layer.mask = mask_data
             
-            # Stamp!
-            stamp_from_canvas(current_arr, pixels[:, :, 0], layer_left, layer_top)
+            # Re-center the mask to the Canvas Center
+            layer.mask_position = psapi.geometry.Point2D(canvas_w / 2, canvas_h / 2)
             
-            # Set Back
-            layer.mask = current_arr
-            # Do NOT update mask_position, keep original
+            return True
             
         except Exception as e:
             print(f"BPSD Mask Write Error: {e}")
             return False
 
+    # --- COLOR PATH ---
     else:
-        # Color Layer Logic
         planar_data = layer.get_image_data()
+        
+        # Case: Empty Layer -> Initialize to Canvas Size
         if not planar_data:
-            # If layer is empty, we initialize it to Canvas Size
             new_data = {
                 0: pixels[:, :, 0], 1: pixels[:, :, 1], 2: pixels[:, :, 2], -1: pixels[:, :, 3]
             }
@@ -308,33 +289,35 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
             layer.center_y = canvas_h / 2
             return True
 
-        # Existing Geometry
+        # Case: Existing Layer -> Stamp (Preserve Bounds)
         l_w = layer.width
         l_h = layer.height
         layer_left = int(layer.center_x - (l_w / 2))
         layer_top = int(layer.center_y - (l_h / 2))
         
-        # 3. Stamp Channels
-        # We iterate through channels. If Blender has data for it, we stamp.
-        # Note: Blender always provides RGBA.
-        
-        # Helper wrapper to reduce copy-paste
         def do_stamp(channel_idx, blender_slice):
             if channel_idx in planar_data:
                 target_arr = planar_data[channel_idx]
                 stamp_from_canvas(target_arr, blender_slice, layer_left, layer_top)
                 planar_data[channel_idx] = target_arr
-            # else: Optional: Add channel if missing? 
-            # Usually better to respect original channel structure.
 
         do_stamp(0, pixels[:, :, 0]) # R
         do_stamp(1, pixels[:, :, 1]) # G
         do_stamp(2, pixels[:, :, 2]) # B
         do_stamp(-1, pixels[:, :, 3]) # A
         
-        # 4. Write Back
-        # We pass the modified planar_data back.
-        # Important: We do NOT pass width/height arguments, forcing it to keep existing dims.
+        # Cleanup Mask channels from this dict to prevent dimension mismatch crashes
+        keys_to_remove = [k for k in planar_data.keys() if k < -1]
+        for k in keys_to_remove:
+            del planar_data[k]
+
+        # Write Back (Implicitly preserves width/height of the RGB channels)
         layer.set_image_data(planar_data) 
         
+    return True
+
+def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False):
+    layered_file = psapi.LayeredFile.read(psd_path)
+    write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask)
+    layered_file.write(psd_path)
     return True

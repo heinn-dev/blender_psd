@@ -273,8 +273,9 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
                 continue
                 
             # since we do not write to disk on alt-s, we can't do this for now...
-            # if not img.is_dirty:
-                # continue
+            # I mean we can, just not really clear, hmm..
+            if not img.is_dirty:
+                continue
             
             layer_path = img.get("psd_layer_path")
             is_mask = img.get("psd_is_mask", False)
