@@ -67,6 +67,49 @@ def run_photoshop_refresh(target_psd_path):
     else:
         print("Linux is not supported for Photoshop interop.")
 
+def is_photoshop_file_unsaved(target_psd_path):
+    """
+    Asks Photoshop if the specific file has unsaved changes.
+    Returns True (Unsaved), False (Clean/Closed), or None (Error).
+    """
+    current_dir = os.path.dirname(__file__)
+    
+    try:
+        if sys.platform == 'win32':
+            vbs_checker = os.path.join(current_dir, "check_status.vbs")
+            if not os.path.exists(vbs_checker): return None
+            
+            # Run VBS and capture output
+            # cscript.exe runs in console mode (allowing stdout capture)
+            result = subprocess.check_output(
+                ["cscript", "//Nologo", vbs_checker, target_psd_path], 
+                encoding='utf-8'
+            )
+            return "TRUE" in result.strip()
+
+        elif sys.platform == 'darwin':
+            # AppleScript One-Liner
+            # "modified" property returns boolean
+            cmd = f'''
+            tell application id "com.adobe.Photoshop"
+                set targetPath to "{target_psd_path}"
+                repeat with d in documents
+                    if (posix path of (file path of d as alias)) is targetPath then
+                        return modified of d
+                    end if
+                end repeat
+            end tell
+            '''
+            result = subprocess.check_output(["osascript", "-e", cmd], encoding='utf-8')
+            return "true" in result.lower()
+
+    except Exception:
+        # If Photoshop isn't running or script fails, assume safe to proceed
+        return False
+        
+    return False
+
+
 # --- SELECTION OPERATOR ---
 class BPSD_OT_select_layer(bpy.types.Operator):
     bl_idname = "bpsd.select_layer"
@@ -202,7 +245,6 @@ class BPSD_OT_save_layer(bpy.types.Operator):
         success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask)
 
         if success:
-            # img.is_dirty = False
             self.report({'INFO'}, f"Saved {img.name}")
             return {'FINISHED'}
         else:
@@ -256,21 +298,21 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
         self.report({'INFO'}, f"Batch saving {len(updates)} layers...")
         success = psd_engine.write_all_layers(active_psd, updates)
 
+        if os.path.exists(props.active_psd_path):
+            props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
+        
         if success:
-            # for img in processed_images:
-                # img.reload() # Optional: Reloads to ensure hash sync, though usually not needed if pixels matched
-                
+            # Cleanup...
             if props.auto_refresh_ps:
-                run_photoshop_refresh(props.active_psd_path)
-                self.report({'INFO'}, "Saved & Triggered Photoshop Refresh.")
+                if is_photoshop_file_unsaved(props.active_psd_path):
+                    self.report({'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS).")
+                else:
+                    run_photoshop_refresh(props.active_psd_path)
+                    self.report({'INFO'}, "Saved & Refreshed Photoshop.")
             else:
                 self.report({'INFO'}, "Saved to disk.")
                 
-            self.report({'INFO'}, "Successfully saved all layers.")
             return {'FINISHED'}
-        else:
-            self.report({'ERROR'}, "Batch save failed. Check console.")
-            return {'CANCELLED'}
 
 # --- PURGE OPERATOR ---
 class BPSD_OT_clean_orphans(bpy.types.Operator):
@@ -354,6 +396,9 @@ class BPSD_OT_reload_all(bpy.types.Operator):
         self.report({'INFO'}, f"Reloading {len(requests)} layers...")
         results = psd_engine.read_all_layers(active_psd, requests)
         
+        if os.path.exists(props.active_psd_path):
+            props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
+        
         # 3. Update Blender Images
         success_count = 0
         for img in images_to_reload:
@@ -363,8 +408,6 @@ class BPSD_OT_reload_all(bpy.types.Operator):
                 try:
                     img.pixels = results[key]
                     img.update()
-                    # Reset dirty flag since we just synced with disk
-                    img.is_dirty = False 
                     success_count += 1
                 except Exception as e:
                     print(f"Failed to update image {img.name}: {e}")

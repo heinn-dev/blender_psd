@@ -6,15 +6,32 @@ class BPSD_PT_main_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'BPSD'
-
+    
     def draw(self, context):
         layout = self.layout
         props = context.scene.bpsd_props
 
         # 1. Connection Header
-        row = layout.row(align=True)
-        row.prop(props, "active_psd_path", text="")
-        row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text="")
+        col = layout.column(align=True)
+        row = col.row(align=True)
+        
+        # A. The Dropdown (ALWAYS ENABLED)
+        # We draw this directly into the main row
+        row.prop(props, "active_psd_image", text="") 
+        
+        # B. The Connect Button (CONDITIONALLY ENABLED)
+        # We check if we have a valid path
+        is_valid = (props.active_psd_path != "")
+        # Create a sub-layout inside the row just for the button.
+        # This keeps the visual alignment (stuck together) but isolates the 'enabled' state.
+        sub = row.row(align=True)
+        sub.enabled = is_valid
+        sub.operator("bpsd.connect_psd", icon='FILE_REFRESH', text="Sync this file")
+        row.prop(props, "auto_sync_incoming", text="", icon='FILE_REFRESH' if props.auto_sync_incoming else 'CANCEL')
+
+        # Optional: Debug Path Label
+        if is_valid:
+            col.label(text=f"Path: {props.active_psd_path}", icon='FILE_FOLDER')
 
         if len(props.layer_list) > 0:
             col = layout.column(align=True)
@@ -28,6 +45,8 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row = col.row(align=True)
             row.operator("bpsd.clean_orphans", text="Purge Old Layers", icon='TRASH')
             
+        layout.separator()
+        layout.label(text="Layers", icon ="RENDERLAYERS")
         layout.separator()
 
         if len(props.layer_list) == 0:
@@ -78,11 +97,10 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 op.is_mask = False
 
             if item.has_mask:
-                row.separator()
                 
                 mask_sub = row.row(align=True)
-                mask_sub.alignment = 'LEFT'
                 mask_sub.alert = (is_active_row and props.active_is_mask)
+                mask_sub.alignment = 'LEFT'
 
                 op = mask_sub.operator( "bpsd.select_layer", text="Mask", icon='MOD_MASK', emboss=False )
                 op.index = i
