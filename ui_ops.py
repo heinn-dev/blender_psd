@@ -63,6 +63,14 @@ class BPSD_OT_select_layer(bpy.types.Operator):
             for area in context.screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = target_img
+                    
+            # figure something out for materials too, maybe a switchable "active texture" texture
+            # mat = bpy.context.object.active_material
+            # slot = mat.texture_slots[mat.active_texture_index]
+            # slot.texture = target_img
+            ts = bpy.context.tool_settings.image_paint
+            if ts.mode == "IMAGE":
+                ts.canvas = target_img 
 
 # --- LOAD OPERATOR ---
 class BPSD_OT_load_layer(bpy.types.Operator):
@@ -87,14 +95,18 @@ class BPSD_OT_load_layer(bpy.types.Operator):
             return {'CANCELLED'}
 
         # 2. Call Engine
-        pixels, w, h = psd_engine.read_layer(psd_path, target_layer, fetch_mask=is_mask)
+        pixels, w, h = psd_engine.read_layer(psd_path, target_layer, props.psd_width, props.psd_height, fetch_mask=is_mask)
         
+        # in photoshop, empty layers have zero pixels
         if pixels is None:
             self.report({'ERROR'}, "Failed to read layer.")
             return {'CANCELLED'}
 
         # 3. Create Image
-        layer_name = target_layer.split("/")[-1]
+        # layer_name = target_layer.split("/")[-1]
+        psd_name = props.active_psd_path.replace("\\", "/")
+        psd_name = psd_name.split("/")[-1]
+        layer_name = psd_name + "/" + target_layer
         img_name = f"{layer_name}_MASK" if is_mask else layer_name
 
         if img_name in bpy.data.images:
@@ -104,7 +116,9 @@ class BPSD_OT_load_layer(bpy.types.Operator):
         else:
             img = bpy.data.images.new(img_name, width=w, height=h, alpha=True)
 
-        img.pixels.foreach_set(pixels)
+        if len(pixels) > 0:
+            img.pixels.foreach_set(pixels)
+            
         tag_image(img, psd_path, target_layer, is_mask)
         img.pack()
 

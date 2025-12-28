@@ -22,13 +22,7 @@ def read_file(path):
         
         is_group = isinstance(layer, psapi.GroupLayer_8bit)
         
-        # Check for mask (Channel -2)
-        # psapi usually loads channels into the layer object
-        # We assume has_mask if channel -2 exists in the underlying data
-        if is_group:
-            has_mask = layer.has_mask()
-        else:
-            has_mask = -2 in layer.get_image_data()
+        has_mask = layer.has_mask()
 
         node = {
             "name": layer_name,
@@ -49,109 +43,123 @@ def read_file(path):
     for layer in layered_file.layers:
         structure.append(parse_layer_structure(layer))
         
-    return structure
+    return structure, layered_file.width, layered_file.height
 
     # except Exception as e:
         # print(f"BPSD Engine Error (Read Structure): {e}")
         # return []
 
-def read_layer(psd_path, layer_path, fetch_mask):
+def read_layer(psd_path, layer_path, target_w , target_h , fetch_mask=False):
     """
     Reads a specific layer's pixels.
-    Returns: (flat_float_pixels, width, height) tuple for Blender.
+    If fetching a mask, uses 'mask_position' (Center) to composite it 
+    correctly onto a white canvas matching the color layer's dimensions.
     """
     try:
         layered_file = psapi.LayeredFile.read(psd_path)
         layer = layered_file.find_layer(layer_path)
         
         if not layer:
-            print(f"Layer not found: {layer_path}")
             return None, 0, 0
-        
-        # both a mask and a layer could be straight up empty if they have no pixels in it
-        
-        # a group can have mask data, but no image data...
-        # make it use .mask later
-        is_group = isinstance(layer, psapi.GroupLayer_8bit)
 
-        # Get Data
-        planar_data = layer.get_image_data()
-        if not planar_data: return None, 0, 0
+        # probably fine?
+        layer_left = 0
+        layer_top = 0
 
-        h, w = planar_data[0].shape
-        
-        print("Trying to load layer" + layer_path + "... fetch mask : " + str(fetch_mask) + " has mask? " + str(-2 in planar_data.keys()))
-        
-        # Mask is channel -2
-        if fetch_mask: #and -2 in planar_data.keys(): # let's just assume this ough
-            w = layer.mask_width()
-            h = layer.mask_height()
-            mask_arr = planar_data[-2]
-            mask_arr = np.flipud(mask_arr)
+        # --- MASK PATH ---
+        if fetch_mask:
+            canvas = np.full((target_h, target_w), 255, dtype=np.uint8)
+            mask_arr = layer.mask
+            mh, mw = mask_arr.shape
             
-            # Expand mask to RGBA for visualization (White mask, opaque alpha)
-            # or just R=G=B=Mask
-            ones = np.full_like(mask_arr, 255)
-            img_stack = np.stack([mask_arr, mask_arr, mask_arr, ones], axis=-1)
+            center_x = layer.mask_position.x
+            center_y = layer.mask_position.y
+            
+            mask_left = int(center_x - (mw / 2))
+            mask_top = int(center_y - (mh / 2))
+            
+            rel_x = mask_left - layer_left
+            rel_y = mask_top - layer_top
+
+            # Destination (Canvas) bounds
+            dst_x1 = max(0, rel_x)
+            dst_y1 = max(0, rel_y)
+            dst_x2 = min(target_w, rel_x + mw)
+            dst_y2 = min(target_h, rel_y + mh)
+
+            src_x1 = dst_x1 - rel_x
+            src_y1 = dst_y1 - rel_y
+            src_x2 = src_x1 + (dst_x2 - dst_x1)
+            src_y2 = src_y1 + (dst_y2 - dst_y1)
+
+            # paste in the overlap
+            if dst_x2 > dst_x1 and dst_y2 > dst_y1:
+                canvas[dst_y1:dst_y2, dst_x1:dst_x2] = mask_arr[src_y1:src_y2, src_x1:src_x2]
+            else:
+                print(f"Mask exists but is outside layer bounds. (Offsets: {rel_x}, {rel_y})")
+
+            canvas = np.flipud(canvas)
+
+            ones = np.full_like(canvas, 255)
+            img_stack = np.stack([canvas, canvas, canvas, ones], axis=-1)
             
             flat_pixels = (img_stack.astype(np.float32) / 255.0).flatten()
-            print("huh?")
-            return flat_pixels, w, h
-            
-            
-        r = planar_data[0]
-        g = planar_data[1]
-        b = planar_data[2]
-        
-        if -1 in planar_data:
-            a = planar_data[-1]
-        else:
-            a = np.full((h, w), 255, dtype=r.dtype)
+            return flat_pixels, target_w, target_h
 
-        img_stack = np.stack([r, g, b, a], axis=-1)
-        img_stack = np.flipud(img_stack)
-        
-        flat_pixels = (img_stack.astype(np.float32) / 255.0).flatten()
-        return flat_pixels, w, h
+        else:
+            # I think blank layers have no data by default?
+            planar_data = layer.get_image_data()
+            
+            r = planar_data[0] if 0 in planar_data else np.full((target_h, target_w), 255, dtype=r.dtype)
+            g = planar_data[1] if 1 in planar_data else np.zeros_like(r)
+            b = planar_data[2] if 2 in planar_data else np.zeros_like(r)
+            
+            a = planar_data[-1] if -1 in planar_data else np.full((target_h, target_w), 0, dtype=r.dtype)
+
+            img_stack = np.stack([r, g, b, a], axis=-1)
+            img_stack = np.flipud(img_stack)
+            
+            flat_pixels = (img_stack.astype(np.float32) / 255.0).flatten()
+            return flat_pixels, target_w, target_h
 
     except Exception as e:
-        print(f"BPSD Engine Error (Read Layer): {e}")
+        print(f"BPSD Engine Error: {e}")
         return None, 0, 0
 
 def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False):
     """
     Writes Blender pixels back to the PSD.
     """
-    try:
-        layered_file = psapi.LayeredFile.read(psd_path)
-        layer = layered_file.find_layer(layer_path)
+    #try:
+    layered_file = psapi.LayeredFile.read(psd_path)
+    layer = layered_file.find_layer(layer_path)
 
-        if not layer: return False
-        if width != layer.width or height != layer.height:
-            print("Dimension mismatch")
-            return False
+    if not layer: return False
+    
+    # ugh.....this does happen for layers, they have different size from colors
+    # compare this with psd_w and psd_h instead
+    
+    # if width != layer.width or height != layer.height:
+    #     print("Dimension mismatch")
+    #     return False
 
-        # Reshape & Flip
-        pixels = np.array(blender_pixels).reshape((height, width, 4))
-        pixels = np.flipud(pixels)
-        pixels = (pixels * 255).astype(np.uint8)
+    # Reshape & Flip
+    pixels = np.array(blender_pixels).reshape((height, width, 4))
+    pixels = np.flipud(pixels)
+    pixels = (pixels * 255).astype(np.uint8)
 
-        if is_mask:
-            # Use Red channel for mask
-            mask_data = pixels[:, :, 0]
-            layer[-2] = mask_data
-        else:
-            new_data = {
-                0: pixels[:, :, 0],
-                1: pixels[:, :, 1],
-                2: pixels[:, :, 2],
-                -1: pixels[:, :, 3]
-            }
-            layer.set_image_data(new_data)
+    if is_mask:
+        mask_data = pixels[:, :, 0]
+        layer.mask = mask_data
+        layer.mask_position = psapi.geometry.Point2D(width / 2, height / 2)
+    else:
+        new_data = {
+            0: pixels[:, :, 0],
+            1: pixels[:, :, 1],
+            2: pixels[:, :, 2],
+            -1: pixels[:, :, 3]
+        }
+        layer.set_image_data(new_data)
 
-        layered_file.write(psd_path)
-        return True
-
-    except Exception as e:
-        print(f"BPSD Engine Error (Write Layer): {e}")
-        return False
+    layered_file.write(psd_path)
+    return True

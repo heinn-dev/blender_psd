@@ -32,8 +32,12 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
     active_layer_index: bpy.props.IntProperty(default=-1)
     active_layer_path: bpy.props.StringProperty()
     active_is_mask: bpy.props.BoolProperty()
+    psd_width: bpy.props.IntProperty()
+    psd_height: bpy.props.IntProperty()
+    
+    # probably needs an rgb(a) toggle?
 
-# --- CONNECT OPERATOR ---
+# --- CONNECT OPERATOR ---psd_height
 
 class BPSD_OT_connect_psd(bpy.types.Operator):
     bl_idname = "bpsd.connect_psd"
@@ -44,10 +48,13 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
         path = props.active_psd_path
         
         # 1. Read
-        tree_data = psd_engine.read_file(path)
+        tree_data,w,h = psd_engine.read_file(path)
         if not tree_data:
             self.report({'ERROR'}, "Could not read PSD.")
             return {'CANCELLED'}
+        
+        props.psd_width = w
+        props.psd_height = h
 
         # 2. Populate
         props.layer_list.clear()
