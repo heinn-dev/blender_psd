@@ -16,6 +16,7 @@ from . import ui_ops
 from . import panels
 
 # --- DATA STRUCTURES ---
+addon_keymaps = []
 
 class BPSD_LayerItem(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty()
@@ -34,7 +35,16 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
     active_is_mask: bpy.props.BoolProperty()
     psd_width: bpy.props.IntProperty()
     psd_height: bpy.props.IntProperty()
-    
+    auto_load_on_select: bpy.props.BoolProperty(
+        name="Auto-Load",
+        description="Automatically load texture when selecting a layer",
+        default=True
+    )
+    auto_purge: bpy.props.BoolProperty(
+        name="Auto-Purge",
+        description="Automatically remove orphan layers on a sync",
+        default=True
+    )
     # probably needs an rgb(a) toggle?
 
 # --- CONNECT OPERATOR ---psd_height
@@ -63,6 +73,9 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
         props.active_layer_index = -1
         props.active_layer_path = ""
         
+        if props.auto_purge:
+            bpy.ops.bpsd.clean_orphans('EXEC_DEFAULT')
+        
         self.report({'INFO'}, "Connected!")
         return {'FINISHED'}
 
@@ -79,7 +92,12 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             if node['children']:
                 self.flatten_tree(node['children'], collection, indent + 1)
 
+
+
+
 # --- REGISTRATION ---
+
+
 
 classes = (
     BPSD_LayerItem,
@@ -88,6 +106,8 @@ classes = (
     ui_ops.BPSD_OT_select_layer,
     ui_ops.BPSD_OT_load_layer,
     ui_ops.BPSD_OT_save_layer,
+    ui_ops.BPSD_OT_save_all_layers,
+    ui_ops.BPSD_OT_clean_orphans,
     panels.BPSD_PT_main_panel,
     panels.BPSD_PT_layer_context,
 )
@@ -96,11 +116,28 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.bpsd_props = bpy.props.PointerProperty(type=BPSD_SceneProperties)
-
+    
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon
+    if kc:
+        km = kc.keymaps.new(name='Image Generic', space_type='IMAGE_EDITOR')
+        
+        # Bind Ctrl+S to OUR operator
+        kmi = km.keymap_items.new(
+            ui_ops.BPSD_OT_save_layer.bl_idname, 
+            'S', 'PRESS', ctrl=True
+        )
+        addon_keymaps.append((km, kmi))
+    
 def unregister():
     del bpy.types.Scene.bpsd_props
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
+        
+    for km, kmi in addon_keymaps:
+        km.keymap_items.remove(kmi)
+    addon_keymaps.clear()
+        
 
 if __name__ == "__main__":
     register()

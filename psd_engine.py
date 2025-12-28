@@ -110,7 +110,7 @@ def read_layer(psd_path, layer_path, target_w , target_h , fetch_mask=False):
             # I think blank layers have no data by default?
             planar_data = layer.get_image_data()
             
-            r = planar_data[0] if 0 in planar_data else np.full((target_h, target_w), 255, dtype=r.dtype)
+            r = planar_data[0] if 0 in planar_data else np.full((target_h, target_w), 255, dtype=np.uint8)
             g = planar_data[1] if 1 in planar_data else np.zeros_like(r)
             b = planar_data[2] if 2 in planar_data else np.zeros_like(r)
             
@@ -127,23 +127,22 @@ def read_layer(psd_path, layer_path, target_w , target_h , fetch_mask=False):
         return None, 0, 0
 
 def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False):
-    """
-    Writes Blender pixels back to the PSD.
-    """
-    #try:
     layered_file = psapi.LayeredFile.read(psd_path)
+    write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask)
+    layered_file.write(psd_path)
+    return True
+
+def write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask):
     layer = layered_file.find_layer(layer_path)
 
     if not layer: return False
     
-    # ugh.....this does happen for layers, they have different size from colors
-    # compare this with psd_w and psd_h instead
-    
+    # this does happen for layers, they have different size from colors
+    # compare this with psd_width and psd_height instead, but we'll think about this later
     # if width != layer.width or height != layer.height:
     #     print("Dimension mismatch")
     #     return False
 
-    # Reshape & Flip
     pixels = np.array(blender_pixels).reshape((height, width, 4))
     pixels = np.flipud(pixels)
     pixels = (pixels * 255).astype(np.uint8)
@@ -161,5 +160,31 @@ def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=Fal
         }
         layer.set_image_data(new_data)
 
-    layered_file.write(psd_path)
     return True
+
+def write_all_layers(psd_path, updates):
+    try:
+        layered_file = psapi.LayeredFile.read(psd_path)
+        
+        layers_updated_count = 0
+
+        for data in updates:
+            layer_path = data['layer_path']
+            width = data['width']
+            height = data['height']
+            is_mask = data['is_mask']
+            pixels = np.array(data['pixels'])
+            
+            if write_to_layered_file(layered_file, layer_path, pixels, width, height, is_mask):
+                layers_updated_count += 1
+
+        if layers_updated_count > 0:
+            layered_file.write(psd_path)
+            return True
+        else:
+            print("No valid layers were found to update.")
+            return False
+
+    except Exception as e:
+        print(f"BPSD Batch Save Error: {e}")
+        return False

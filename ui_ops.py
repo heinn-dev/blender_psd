@@ -10,6 +10,26 @@ def tag_image(image, psd_path, layer_path, is_mask=False):
     image["psd_is_mask"] = is_mask
     image["bpsd_managed"] = True 
 
+def find_loaded_image(psd_path, layer_path, is_mask):
+    """Returns the bpy.types.Image if it exists, else None."""
+    for img in bpy.data.images:
+        if (img.get("psd_path") == psd_path and 
+            img.get("psd_layer_path") == layer_path and
+            img.get("psd_is_mask", False) == is_mask):
+            return img
+    return None
+
+def focus_image_editor(context, image):
+    """Forces the active Image Editor to show the given image."""
+    for area in context.screen.areas:
+        if area.type == 'IMAGE_EDITOR':
+            area.spaces.active.image = image
+            break
+        
+    ts = bpy.context.tool_settings.image_paint
+    if ts.mode == "IMAGE":
+        ts.canvas = image 
+
 # --- SELECTION OPERATOR ---
 class BPSD_OT_select_layer(bpy.types.Operator):
     bl_idname = "bpsd.select_layer"
@@ -24,53 +44,24 @@ class BPSD_OT_select_layer(bpy.types.Operator):
     def execute(self, context):
         props = context.scene.bpsd_props
         
-        # 1. Update the UI List Selection
         props.active_layer_index = self.index
         props.active_layer_path = self.path
         props.active_is_mask = self.is_mask
         
-        # 2. Attempt to find the matching image in Blender
-        self.sync_image_editor(context, self.path)
+        existing_img = find_loaded_image(props.active_psd_path, self.path, self.is_mask)
         
+        if existing_img:
+            focus_image_editor(context, existing_img)
+            
+        elif props.auto_load_on_select:
+            bpy.ops.bpsd.load_layer(
+                'EXEC_DEFAULT', 
+                layer_path=self.path, 
+            )
+            # Note: The load_layer op handles the focusing itself upon completion.
+            
         return {'FINISHED'}
 
-    def sync_image_editor(self, context, layer_path):
-        """Finds the specific Blender image (Layer or Mask) and displays it."""
-        props = context.scene.bpsd_props
-        current_psd = props.active_psd_path
-        
-        # What are we looking for?
-        target_wants_mask = props.active_is_mask
-        
-        target_img = None
-        
-        for img in bpy.data.images:
-            # 1. Check File and Layer Paths
-            if (img.get("psd_path") != current_psd or 
-                img.get("psd_layer_path") != layer_path):
-                continue
-            
-            # 2. Check Type Match (Image vs Mask)
-            # Default to False if tag is missing (assumes it's a color layer)
-            img_is_mask = img.get("psd_is_mask", False)
-            
-            if img_is_mask == target_wants_mask:
-                target_img = img
-                break # Found the exact match
-        
-        # 3. Update the Editor
-        if target_img:
-            for area in context.screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = target_img
-                    
-            # figure something out for materials too, maybe a switchable "active texture" texture
-            # mat = bpy.context.object.active_material
-            # slot = mat.texture_slots[mat.active_texture_index]
-            # slot.texture = target_img
-            ts = bpy.context.tool_settings.image_paint
-            if ts.mode == "IMAGE":
-                ts.canvas = target_img 
 
 # --- LOAD OPERATOR ---
 class BPSD_OT_load_layer(bpy.types.Operator):
@@ -126,18 +117,11 @@ class BPSD_OT_load_layer(bpy.types.Operator):
         img.colorspace_settings.name = 'Non-Color' if is_mask else 'sRGB'
 
         # 4. View It
-        self.focus_image_in_editor(context, img)
+        focus_image_editor(context, img)
         self.report({'INFO'}, f"Loaded: {img_name}")
         return {'FINISHED'}
 
-    def focus_image_in_editor(self, context, image):
-        if context.active_object and context.active_object.type == 'MESH':
-            bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
-        
-        for area in context.screen.areas:
-            if area.type == 'IMAGE_EDITOR':
-                area.spaces.active.image = image
-                break
+
 
 # --- SAVE OPERATOR ---
 class BPSD_OT_save_layer(bpy.types.Operator):
@@ -187,3 +171,113 @@ class BPSD_OT_save_layer(bpy.types.Operator):
         else:
             self.report({'ERROR'}, "Write failed.")
             return {'CANCELLED'}
+
+class BPSD_OT_save_all_layers(bpy.types.Operator):
+    bl_idname = "bpsd.save_all_layers"
+    bl_label = "Save All Modified"
+    bl_description = "Save all managed textures that have unsaved changes to the PSD"
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+        active_psd = props.active_psd_path
+        
+        updates = []
+        processed_images = [] # Keep track to clear dirty flags later
+
+        # 1. Find candidates
+        for img in bpy.data.images:
+            # Must be part of this PSD
+            if img.get("psd_path") != active_psd:
+                continue
+                
+            # Must be marked as ours
+            if not img.get("bpsd_managed"):
+                continue
+                
+            # since we do not write to disk on alt-s, we can't do this for now...
+            # if not img.is_dirty:
+                # continue
+            
+            # Prepare Data Packet
+            layer_path = img.get("psd_layer_path")
+            is_mask = img.get("psd_is_mask", False)
+            
+            if not layer_path: continue
+
+            updates.append({
+                'layer_path': layer_path,
+                'pixels': np.array(img.pixels), # Accessing pixels is heavy, do it here
+                'width': img.size[0],
+                'height': img.size[1],
+                'is_mask': is_mask
+            })
+            
+            processed_images.append(img)
+
+        if not updates:
+            self.report({'INFO'}, "No unsaved changes found.")
+            return {'CANCELLED'}
+
+        # 2. Call Engine
+        self.report({'INFO'}, f"Batch saving {len(updates)} layers...")
+        success = psd_engine.write_all_layers(active_psd, updates)
+
+        # 3. Cleanup
+        if success:
+            for img in processed_images:
+                img.is_dirty = False
+                img.reload() # Optional: Reloads to ensure hash sync, though usually not needed if pixels matched
+            self.report({'INFO'}, "Successfully saved all layers.")
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, "Batch save failed. Check console.")
+            return {'CANCELLED'}
+        
+class BPSD_OT_clean_orphans(bpy.types.Operator):
+    bl_idname = "bpsd.clean_orphans"
+    bl_label = "Clean Unused Layers"
+    bl_description = "Delete Blender images that no longer match a layer in the current PSD"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+        active_psd = props.active_psd_path
+        
+        # 1. Build a set of valid paths from the current UI list
+        # We need to support both regular layers and masks
+        valid_paths = set()
+        for item in props.layer_list:
+            valid_paths.add(item.path)
+        
+        images_to_remove = []
+        
+        # 2. Scan Blender Images
+        for img in bpy.data.images:
+            # Check if this image belongs to our system
+            if not img.get("bpsd_managed"):
+                continue
+            
+            img_psd = img.get("psd_path")
+            img_layer = img.get("psd_layer_path")
+            
+            # Condition A: It belongs to a different PSD entirely (orphaned by file switch)
+            if img_psd != active_psd:
+                images_to_remove.append(img)
+                continue
+                
+            # Condition B: It belongs to this PSD, but the layer path is gone
+            if img_layer not in valid_paths:
+                images_to_remove.append(img)
+                continue
+        
+        # 3. Delete them
+        count = len(images_to_remove)
+        if count == 0:
+            self.report({'INFO'}, "No orphaned layers found.")
+            return {'CANCELLED'}
+            
+        for img in images_to_remove:
+            bpy.data.images.remove(img)
+            
+        self.report({'INFO'}, f"Removed {count} orphaned images.")
+        return {'FINISHED'}

@@ -16,6 +16,11 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.prop(props, "active_psd_path", text="")
         row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text="")
 
+        if len(props.layer_list) > 0:
+            row = layout.row(align=True)
+            row.operator("bpsd.save_all_layers", text="Save All", icon='FILE_TICK')
+            row.operator("bpsd.clean_orphans", text="Purge Old", icon='TRASH')
+
         layout.separator()
 
         # 2. Nested Box Tree
@@ -23,7 +28,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             
             # Initialize the stack with the main layout
             layout_stack = [layout]
-            current_indent = -1
+            current_indent = 0
             
             for i, item in enumerate(props.layer_list):
                 
