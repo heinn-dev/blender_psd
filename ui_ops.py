@@ -72,12 +72,12 @@ class BPSD_OT_load_layer(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     layer_path: bpy.props.StringProperty()
-    load_mask: bpy.props.BoolProperty(default=False)
 
     def execute(self, context):
         # 1. Resolve Data
         props = context.scene.bpsd_props
         psd_path = props.active_psd_path
+        is_mask = props.active_is_mask
         
         # If no path arg provided, use selected layer
         target_layer = self.layer_path if self.layer_path else props.active_layer_path
@@ -87,7 +87,7 @@ class BPSD_OT_load_layer(bpy.types.Operator):
             return {'CANCELLED'}
 
         # 2. Call Engine
-        pixels, mask, w, h = psd_engine.read_layer(psd_path, target_layer, fetch_mask=self.load_mask)
+        pixels, mask, w, h = psd_engine.read_layer(psd_path, target_layer, fetch_mask=is_mask)
         
         if pixels is None:
             self.report({'ERROR'}, "Failed to read layer.")
@@ -95,7 +95,7 @@ class BPSD_OT_load_layer(bpy.types.Operator):
 
         # 3. Create Image
         layer_name = target_layer.split("/")[-1]
-        img_name = f"{layer_name}_MASK" if self.load_mask else layer_name
+        img_name = f"{layer_name}_MASK" if is_mask else layer_name
 
         if img_name in bpy.data.images:
             img = bpy.data.images[img_name]
@@ -105,11 +105,11 @@ class BPSD_OT_load_layer(bpy.types.Operator):
             img = bpy.data.images.new(img_name, width=w, height=h, alpha=True)
 
         img.pixels.foreach_set(pixels)
-        tag_image(img, psd_path, target_layer, self.load_mask)
+        tag_image(img, psd_path, target_layer, is_mask)
         img.pack()
 
         # Colorspace
-        img.colorspace_settings.name = 'Non-Color' if self.load_mask else 'sRGB'
+        img.colorspace_settings.name = 'Non-Color' if is_mask else 'sRGB'
 
         # 4. View It
         self.focus_image_in_editor(context, img)

@@ -22,66 +22,65 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         if len(props.layer_list) > 0:
             
             # Initialize the stack with the main layout
-            # The stack holds the current 'parent' layout to draw into
             layout_stack = [layout]
             current_indent = -1
             
             for i, item in enumerate(props.layer_list):
                 
-                # --- STACK LOGIC (Simulated Recursion) ---
-                
-                # If this item is deeper than the previous one, open new boxes
+                # --- STACK LOGIC ---
                 if item.indent > current_indent:
                     for _ in range(item.indent - current_indent):
-                        # Create a box inside the current top of stack
                         box = layout_stack[-1].box()
-                        # Make a column inside that box so items align nicely
                         col = box.column(align=True)
                         layout_stack.append(col)
                 
-                # If this item is shallower, pop back up the stack
                 elif item.indent < current_indent:
                     for _ in range(current_indent - item.indent):
                         if len(layout_stack) > 1:
                             layout_stack.pop()
 
-                # Update tracker
                 current_indent = item.indent
                 
                 # --- DRAWING THE ITEM ---
-                
-                # Draw into whatever is currently at the top of the stack
                 current_layout = layout_stack[-1]
                 
-                # if we are a mask, we draw onto layout_stack[-2]
-                
+                # Create the main row for this item line
                 row = current_layout.row(align=True)
                 row.alignment = 'LEFT'
                 
-                # Selection Highlight
-                if i == props.active_layer_index:
-                    row = row.row(align=True) # Nested row for cleanly applying alert
-                    row.alignment = 'LEFT'
-                    row.alert = True
+                # Check if this is the active row
+                is_active_row = (i == props.active_layer_index)
                 
-                # Icon Logic
+                # --- 1. Draw Layer/Group Name ---
                 icon = 'FILE_FOLDER' if item.layer_type == 'GROUP' else 'IMAGE_DATA'
                 
-                # Draw Selector Button
-                # Note: We use item.name here, not display_name, 
-                # because the boxes provide the visual structure now.
                 if item.layer_type == "GROUP":
                     row.label(text=item.name, icon=icon)
+                    row.alignment = 'LEFT'
                 else:
-                    op = row.operator("bpsd.select_layer", text=item.name, icon=icon, emboss=False)
+                    # Create a sub-row just for the layer name button
+                    # We highlight it ONLY if the row is active AND we are not looking at the mask
+                    layer_sub = row.row(align=True)
+                    layer_sub.alert = (is_active_row and not props.active_is_mask)
+                    layer_sub.alignment = 'LEFT'
+                    
+                    op = layer_sub.operator("bpsd.select_layer", text=item.name, icon=icon, emboss=False)
                     op.index = i
                     op.path = item.path
+                    op.is_mask = False # Clicking this sets mask mode to False
                 
+                # --- 2. Draw Mask Button (if exists) ---
                 if item.has_mask:
-                    op = row.operator("bpsd.select_layer", text="Mask", icon='MOD_MASK', emboss=False)
+                    # Create a sub-row just for the mask button
+                    # Highlight ONLY if row is active AND we ARE looking at the mask
+                    mask_sub = row.row(align=True)
+                    mask_sub.alert = (is_active_row and props.active_is_mask)
+                    mask_sub.alignment = 'RIGHT'
+                    
+                    op = mask_sub.operator("bpsd.select_layer", text="Mask", icon='MOD_MASK', emboss=False)
                     op.index = i
-                    op.is_mask = True
                     op.path = item.path
+                    op.is_mask = True # Clicking this sets mask mode to True
 
 class BPSD_PT_layer_context(bpy.types.Panel):
     bl_label = "Layer Operations"
@@ -109,9 +108,8 @@ class BPSD_PT_layer_context(bpy.types.Panel):
         row = box.row()
         op = row.operator("bpsd.load_layer", text="Load Texture", icon='TEXTURE')
         op.layer_path = item.path
-        op.load_mask = False
+        op.load_mask = props.active_is_mask
         
         # Save Button (Explicit)
         row = box.row()
         op = row.operator("bpsd.save_layer", text="Force Save", icon='FILE_TICK')
-        op.layer_path = item.path
