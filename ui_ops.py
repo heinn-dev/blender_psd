@@ -2,6 +2,8 @@ import bpy
 import os
 import numpy as np
 from . import psd_engine
+import tempfile
+import subprocess
 
 # --- HELPER ---
 def tag_image(image, psd_path, layer_path, is_mask=False):
@@ -29,6 +31,35 @@ def focus_image_editor(context, image):
     ts = bpy.context.tool_settings.image_paint
     if ts.mode == "IMAGE":
         ts.canvas = image 
+        
+
+def run_photoshop_refresh(target_psd_path):
+    # 1. Get Settings
+    addon_prefs = bpy.context.preferences.addons[__package__].preferences
+    ps_exe = addon_prefs.photoshop_exe_path
+    
+    # 2. Paths
+    current_dir = os.path.dirname(__file__)
+    script_path = os.path.join(current_dir, "refresh.jsx")
+    data_path = os.path.join(current_dir, "bpsd_target.txt")
+    
+    if not os.path.exists(ps_exe):
+        print("BPSD: Photoshop executable not found.")
+        return
+
+    # 3. Write the Sidecar File (Data)
+    try:
+        with open(data_path, "w", encoding="utf-8") as f:
+            f.write(target_psd_path)
+    except Exception as e:
+        print(f"BPSD: Could not write param file: {e}")
+        return
+        
+    # 4. Run the Static Script (Code)
+    try:
+        subprocess.Popen([ps_exe, script_path])
+    except Exception as e:
+        print(f"BPSD: Failed to launch Photoshop: {e}")
 
 # --- SELECTION OPERATOR ---
 class BPSD_OT_select_layer(bpy.types.Operator):
@@ -37,9 +68,9 @@ class BPSD_OT_select_layer(bpy.types.Operator):
     bl_description = "Select this layer and show it in the Image Editor"
     bl_options = {'INTERNAL'} 
     
-    index: bpy.props.IntProperty()
-    path: bpy.props.StringProperty()
-    is_mask : bpy.props.BoolProperty()
+    index: bpy.props.IntProperty()# type: ignore
+    path: bpy.props.StringProperty()# type: ignore
+    is_mask : bpy.props.BoolProperty()# type: ignore
     
     def execute(self, context):
         props = context.scene.bpsd_props
@@ -70,7 +101,7 @@ class BPSD_OT_load_layer(bpy.types.Operator):
     bl_description = "Load this PSD layer into a Blender Image"
     bl_options = {'REGISTER', 'UNDO'}
 
-    layer_path: bpy.props.StringProperty()
+    layer_path: bpy.props.StringProperty()  # type: ignore
 
     def execute(self, context):
         # 1. Resolve Data
@@ -122,7 +153,6 @@ class BPSD_OT_load_layer(bpy.types.Operator):
         return {'FINISHED'}
 
 
-
 # --- SAVE OPERATOR ---
 class BPSD_OT_save_layer(bpy.types.Operator):
     bl_idname = "bpsd.save_layer"
@@ -130,8 +160,8 @@ class BPSD_OT_save_layer(bpy.types.Operator):
     bl_description = "Write to PSD"
 
     # Optional overrides
-    layer_path: bpy.props.StringProperty()
-    image_name: bpy.props.StringProperty()
+    layer_path: bpy.props.StringProperty()# type: ignore
+    image_name: bpy.props.StringProperty()# type: ignore
 
     def execute(self, context):
         # Try to find image to save
@@ -162,6 +192,7 @@ class BPSD_OT_save_layer(bpy.types.Operator):
         pixels = np.array(img.pixels)
         w, h = img.size
         
+        # we shouldn't write to GROUP or SMART, unless we're writing the mask...
         success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask)
 
         if success:
@@ -172,6 +203,7 @@ class BPSD_OT_save_layer(bpy.types.Operator):
             self.report({'ERROR'}, "Write failed.")
             return {'CANCELLED'}
 
+# --- SAVE ALL OPERATOR ---
 class BPSD_OT_save_all_layers(bpy.types.Operator):
     bl_idname = "bpsd.save_all_layers"
     bl_label = "Save All Modified"
@@ -183,14 +215,12 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
         
         updates = []
         processed_images = [] # Keep track to clear dirty flags later
-
-        # 1. Find candidates
+        
+        # we shouldn't write to GROUP or SMART, unless we're writing the mask...
         for img in bpy.data.images:
-            # Must be part of this PSD
             if img.get("psd_path") != active_psd:
                 continue
                 
-            # Must be marked as ours
             if not img.get("bpsd_managed"):
                 continue
                 
@@ -198,7 +228,6 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
             # if not img.is_dirty:
                 # continue
             
-            # Prepare Data Packet
             layer_path = img.get("psd_layer_path")
             is_mask = img.get("psd_is_mask", False)
             
@@ -218,20 +247,26 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
             self.report({'INFO'}, "No unsaved changes found.")
             return {'CANCELLED'}
 
-        # 2. Call Engine
         self.report({'INFO'}, f"Batch saving {len(updates)} layers...")
         success = psd_engine.write_all_layers(active_psd, updates)
 
-        # 3. Cleanup
         if success:
-            for img in processed_images:
-                img.reload() # Optional: Reloads to ensure hash sync, though usually not needed if pixels matched
+            # for img in processed_images:
+                # img.reload() # Optional: Reloads to ensure hash sync, though usually not needed if pixels matched
+                
+            if props.auto_refresh_ps:
+                run_photoshop_refresh(props.active_psd_path)
+                self.report({'INFO'}, "Saved & Triggered Photoshop Refresh.")
+            else:
+                self.report({'INFO'}, "Saved to disk.")
+                
             self.report({'INFO'}, "Successfully saved all layers.")
             return {'FINISHED'}
         else:
             self.report({'ERROR'}, "Batch save failed. Check console.")
             return {'CANCELLED'}
-        
+
+# --- PURGE OPERATOR ---
 class BPSD_OT_clean_orphans(bpy.types.Operator):
     bl_idname = "bpsd.clean_orphans"
     bl_label = "Clean Unused Layers"
@@ -242,34 +277,27 @@ class BPSD_OT_clean_orphans(bpy.types.Operator):
         props = context.scene.bpsd_props
         active_psd = props.active_psd_path
         
-        # 1. Build a set of valid paths from the current UI list
-        # We need to support both regular layers and masks
         valid_paths = set()
         for item in props.layer_list:
             valid_paths.add(item.path)
         
         images_to_remove = []
         
-        # 2. Scan Blender Images
         for img in bpy.data.images:
-            # Check if this image belongs to our system
             if not img.get("bpsd_managed"):
                 continue
             
             img_psd = img.get("psd_path")
             img_layer = img.get("psd_layer_path")
             
-            # Condition A: It belongs to a different PSD entirely (orphaned by file switch)
             if img_psd != active_psd:
                 images_to_remove.append(img)
                 continue
                 
-            # Condition B: It belongs to this PSD, but the layer path is gone
             if img_layer not in valid_paths:
                 images_to_remove.append(img)
                 continue
         
-        # 3. Delete them
         count = len(images_to_remove)
         if count == 0:
             self.report({'INFO'}, "No orphaned layers found.")

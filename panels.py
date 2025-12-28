@@ -17,10 +17,16 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text="")
 
         if len(props.layer_list) > 0:
-            row = layout.row(align=True)
-            row.operator("bpsd.save_all_layers", text="Save All", icon='FILE_TICK')
-            row.operator("bpsd.clean_orphans", text="Purge Old", icon='TRASH')
-
+            col = layout.column(align=True)
+            
+            row = col.row(align=True)
+            row.operator("bpsd.save_all_layers", text="Save All Changes", icon='FILE_TICK')
+            
+            row.prop(props, "auto_refresh_ps", text="", icon='FILE_REFRESH')
+            
+            row = col.row(align=True)
+            row.operator("bpsd.clean_orphans", text="Purge Old Layers", icon='TRASH')
+            
         layout.separator()
 
         # 2. Nested Box Tree
