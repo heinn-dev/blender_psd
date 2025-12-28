@@ -13,20 +13,21 @@ def read_file(path):
             layer_name = layer.name
             full_path = f"{current_path}/{layer_name}" if current_path else layer_name
             
-            is_group = isinstance(layer, psapi.GroupLayer_8bit)
+            is_group = False
             
             match layer:
                 case psapi.GroupLayer_8bit():
                     layer_type = "GROUP"
                     is_group = True
 
+                case psapi.Layer_8bit():
+                    layer_type = "LAYER"
+                    
                 case psapi.SmartObjectLayer_8bit():
                     layer_type = "SMART"
-                    is_group = False
 
                 case _:
-                    layer_type = "LAYER"
-                    is_group = False
+                    layer_type = "SPECIAL"
             
             has_mask = layer.has_mask()
 
@@ -37,6 +38,8 @@ def read_file(path):
                 "has_mask": has_mask,
                 "children": []
             }
+            
+            print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
             
             if is_group:
                 for child in layer.layers:
