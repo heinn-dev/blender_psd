@@ -1,3 +1,4 @@
+
 bl_info = {
     "name": "BlenderPSD",
     "author": "Heinn",
@@ -10,105 +11,89 @@ bl_info = {
 
 
 import bpy
-import sys
-import numpy as np
-import psd_engine
-import ui_ops
-# from PIL import Image
+from . import psd_engine
+from . import ui_ops
+from . import panels
 
-for path in sys.path:
-    if "extensions" in path and "blender_psd" in path:
-        print(f"FOUND EXTENSION PATH: {path}")
-try:
-    import photoshopapi as psapi
-    print("SUCCESS: psapi imported!")
-except ImportError as e:
-    print(f"FAILED: {e}")
+# --- DATA STRUCTURES ---
 
-testPSDpath = "C:\\Users\\Kirill\\AppData\\Roaming\\Blender Foundation\\Blender\\4.4\\extensions\\user_default\\blender_psd\\test.psd"
-test_layered_file = None
+class BPSD_LayerItem(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty()
+    path: bpy.props.StringProperty() 
+    layer_type: bpy.props.StringProperty() 
+    indent: bpy.props.IntProperty(default=0)
+    has_mask: bpy.props.BoolProperty(default=False)
 
+class BPSD_SceneProperties(bpy.types.PropertyGroup):
+    active_psd_path: bpy.props.StringProperty(
+        name="PSD Path", subtype='FILE_PATH'
+    )
+    layer_list: bpy.props.CollectionProperty(type=BPSD_LayerItem)
+    active_layer_index: bpy.props.IntProperty(default=-1)
+    active_layer_path: bpy.props.StringProperty()
+    active_is_mask: bpy.props.BoolProperty()
 
+# --- CONNECT OPERATOR ---
 
+class BPSD_OT_connect_psd(bpy.types.Operator):
+    bl_idname = "bpsd.connect_psd"
+    bl_label = "Connect"
 
-
-def draw_layer_tree(layout, layers, path=""):
-    for layer in layers:
-        current_path = f"{path}/{layer.name}" if path else layer.name
-        row = layout.row()
+    def execute(self, context):
+        props = context.scene.bpsd_props
+        path = props.active_psd_path
         
-        if isinstance(layer, psapi.GroupLayer_8bit):
-            box = layout.box()
-            box.label(text=layer.name, icon='FILE_FOLDER')
-            draw_layer_tree(box, layer.layers, current_path) 
-        else:
-            row.label(icon='IMAGE_DATA') # text=layer.name, 
-            # Load Button
-            load_op = row.operator("bpsd.load_layer", text=layer.name)
-            load_op.layer_path = current_path
+        # 1. Read
+        tree_data = psd_engine.read_file(path)
+        if not tree_data:
+            self.report({'ERROR'}, "Could not read PSD.")
+            return {'CANCELLED'}
+
+        # 2. Populate
+        props.layer_list.clear()
+        self.flatten_tree(tree_data, props.layer_list, indent=0)
+        
+        props.active_layer_index = -1
+        props.active_layer_path = ""
+        
+        self.report({'INFO'}, "Connected!")
+        return {'FINISHED'}
+
+    def flatten_tree(self, nodes, collection, indent):
+        # Reverse to show top layers first
+        for node in nodes: 
+            item = collection.add()
+            item.name = node['name']
+            item.path = node['path']
+            item.layer_type = node['type']
+            item.has_mask = node.get('has_mask', False)
+            item.indent = indent
             
-            # Save Button (Only if image exists in Blender)
-            if layer.name in bpy.data.images:
-                save_op = row.operator("bpsd.save_layer", text="Save")
-                save_op.layer_path = current_path
-                save_op.bl_image_name = layer.name
+            if node['children']:
+                self.flatten_tree(node['children'], collection, indent + 1)
 
+# --- REGISTRATION ---
 
-class MYADDON_PT_panel(bpy.types.Panel):
-    global test_layered_file
-
-    bl_label = "Blender PSD"
-    bl_idname = "BPSD_PT_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'BPSD'
-
-    def draw(self, context):
-        global test_layered_file
-        layout = self.layout
-
-        try:
-            if test_layered_file is None:
-                test_layered_file = psapi.LayeredFile.read(testPSDpath)
-
-            draw_layer_tree(layout, test_layered_file.layers);
-        except Exception as e:
-           print({e})
-
-
-
-def find_by_id(layers, id):
-    for layer in layers:
-        if layer.layer_id == id:
-            return layer
-        elif layer.is_group():
-            return find_by_id(layer)
+classes = (
+    BPSD_LayerItem,
+    BPSD_SceneProperties,
+    BPSD_OT_connect_psd,
+    ui_ops.BPSD_OT_select_layer,
+    ui_ops.BPSD_OT_load_layer,
+    ui_ops.BPSD_OT_save_layer,
+    panels.BPSD_PT_main_panel,
+    panels.BPSD_PT_layer_context,
+)
 
 def register():
-    global test_layered_file
-    bpy.utils.register_class(MYADDON_PT_panel)
-    bpy.utils.register_class(BPSD_OT_load_layer)
-    bpy.utils.register_class(BPSD_OT_save_layer)
-    
+    for cls in classes:
+        bpy.utils.register_class(cls)
+    bpy.types.Scene.bpsd_props = bpy.props.PointerProperty(type=BPSD_SceneProperties)
+
 def unregister():
-    bpy.utils.unregister_class(MYADDON_PT_panel)
-    bpy.utils.unregister_class(BPSD_OT_load_layer)
-    bpy.utils.unregister_class(BPSD_OT_save_layer)
-
-def image_update_callback():
-    # iterate through all images we know are in the psd, if is_dirty is false just save em?
-    # .... or just timer it
-    print("Image was modified or saved!")
-
-# Subscribe to the 'is_dirty' property of images
-subscribe_to = bpy.types.Image, "is_dirty"
-
-bpy.msgbus.subscribe_rna(
-    key=subscribe_to,
-    owner=bpy.context.window_manager,
-    args=(),
-    notify=image_update_callback,
-)
+    del bpy.types.Scene.bpsd_props
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
 
 if __name__ == "__main__":
     register()

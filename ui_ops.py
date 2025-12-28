@@ -1,98 +1,175 @@
 import bpy
-import photoshopapi as psapi
+import os
+import numpy as np
+from . import psd_engine
 
+# --- HELPER ---
+def tag_image(image, psd_path, layer_path, is_mask=False):
+    image["psd_path"] = psd_path
+    image["psd_layer_path"] = layer_path
+    image["psd_is_mask"] = is_mask
+    image["bpsd_managed"] = True 
+
+# --- SELECTION OPERATOR ---
+class BPSD_OT_select_layer(bpy.types.Operator):
+    bl_idname = "bpsd.select_layer"
+    bl_label = "Select Layer"
+    bl_description = "Select this layer and show it in the Image Editor"
+    bl_options = {'INTERNAL'} 
+    
+    index: bpy.props.IntProperty()
+    path: bpy.props.StringProperty()
+    is_mask : bpy.props.BoolProperty()
+    
+    def execute(self, context):
+        props = context.scene.bpsd_props
+        
+        # 1. Update the UI List Selection
+        props.active_layer_index = self.index
+        props.active_layer_path = self.path
+        props.active_is_mask = self.is_mask
+        
+        # 2. Attempt to find the matching image in Blender
+        self.sync_image_editor(context, self.path)
+        
+        return {'FINISHED'}
+
+    def sync_image_editor(self, context, layer_path):
+        """Finds the specific Blender image (Layer or Mask) and displays it."""
+        props = context.scene.bpsd_props
+        current_psd = props.active_psd_path
+        
+        # What are we looking for?
+        target_wants_mask = props.active_is_mask
+        
+        target_img = None
+        
+        for img in bpy.data.images:
+            # 1. Check File and Layer Paths
+            if (img.get("psd_path") != current_psd or 
+                img.get("psd_layer_path") != layer_path):
+                continue
+            
+            # 2. Check Type Match (Image vs Mask)
+            # Default to False if tag is missing (assumes it's a color layer)
+            img_is_mask = img.get("psd_is_mask", False)
+            
+            if img_is_mask == target_wants_mask:
+                target_img = img
+                break # Found the exact match
+        
+        # 3. Update the Editor
+        if target_img:
+            for area in context.screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    area.spaces.active.image = target_img
+
+# --- LOAD OPERATOR ---
 class BPSD_OT_load_layer(bpy.types.Operator):
     bl_idname = "bpsd.load_layer"
     bl_label = "Load Layer"
-    
+    bl_description = "Load this PSD layer into a Blender Image"
+    bl_options = {'REGISTER', 'UNDO'}
+
     layer_path: bpy.props.StringProperty()
+    load_mask: bpy.props.BoolProperty(default=False)
 
     def execute(self, context):
-        global test_layered_file
-        if not test_layered_file:
-            test_layered_file = psapi.LayeredFile.read(testPSDpath)
+        # 1. Resolve Data
+        props = context.scene.bpsd_props
+        psd_path = props.active_psd_path
+        
+        # If no path arg provided, use selected layer
+        target_layer = self.layer_path if self.layer_path else props.active_layer_path
 
-        # Retrieve the layer by path (e.g., "Group/LayerName")
-        layer = test_layered_file.find_layer(self.layer_path)
-        
-        # Extract planar data and merge to a PIL image for conversion
-        # psapi returns {channel_index: numpy_array}
-        img_data = layer.get_image_data()
-        
-        for key, value in img_data.items():
-            print (key, value)
-        # Reconstruct RGBA for Blender
-        h, w = img_data[0].shape
-        rgba = np.stack([img_data[0], img_data[1], img_data[2], img_data[-1]], axis=-1)
-        # what's the order??? I think just -1 for alpha, -2 for clip mask
-        # empty layers have no data, either don't load or blank it out?
-        # https://photoshopapi.readthedocs.io/en/latest/python/layers/image.html#photoshopapi.ImageLayer_8bit.get_image_data
+        if not psd_path or not target_layer:
+            self.report({'ERROR'}, "No layer selected.")
+            return {'CANCELLED'}
 
-        rgba = np.flipud(rgba) # Flip for Blender
+        # 2. Call Engine
+        pixels, mask, w, h = psd_engine.read_layer(psd_path, target_layer, fetch_mask=self.load_mask)
         
-        # Create Blender Image
-        img_name = layer.name
+        if pixels is None:
+            self.report({'ERROR'}, "Failed to read layer.")
+            return {'CANCELLED'}
+
+        # 3. Create Image
+        layer_name = target_layer.split("/")[-1]
+        img_name = f"{layer_name}_MASK" if self.load_mask else layer_name
+
         if img_name in bpy.data.images:
-            bpy.data.images.remove(bpy.data.images[img_name])
-            
-        bl_image = bpy.data.images.new(img_name, width=w, height=h, alpha=True)
-        # Normalize and flatten for Blender's .pixels
-        bl_image.pixels = (rgba.astype(np.float32) / 255.0).flatten()
+            img = bpy.data.images[img_name]
+            if img.size[0] != w or img.size[1] != h:
+                img.scale(w, h)
+        else:
+            img = bpy.data.images.new(img_name, width=w, height=h, alpha=True)
 
+        img.pixels.foreach_set(pixels)
+        tag_image(img, psd_path, target_layer, self.load_mask)
+        img.pack()
 
-        # unslop this stuff
+        # Colorspace
+        img.colorspace_settings.name = 'Non-Color' if self.load_mask else 'sRGB'
 
-        if context.active_object and context.active_object.type == 'MESH':
-            bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
-            # 2. Find any Image Editor and point it to our new texture
-            for area in context.screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    # This sets the image in the editor
-                    area.spaces.active.image = bl_image
-        
-        # bl_image.alpha_mode = 'STRAIGHT'
-        # bl_image.colorspace_settings.name = 'sRGB'
-
-        # Trigger the UI update
-        for area in context.screen.areas:
-            if area.type == 'IMAGE_EDITOR':
-                area.spaces.active.image = bl_image
-
-        # Optional: Set the editor to Paint mode specifically
-        
+        # 4. View It
+        self.focus_image_in_editor(context, img)
         self.report({'INFO'}, f"Loaded: {img_name}")
         return {'FINISHED'}
 
+    def focus_image_in_editor(self, context, image):
+        if context.active_object and context.active_object.type == 'MESH':
+            bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
+        
+        for area in context.screen.areas:
+            if area.type == 'IMAGE_EDITOR':
+                area.spaces.active.image = image
+                break
+
+# --- SAVE OPERATOR ---
 class BPSD_OT_save_layer(bpy.types.Operator):
     bl_idname = "bpsd.save_layer"
     bl_label = "Save Layer"
-    
+    bl_description = "Write to PSD"
+
+    # Optional overrides
     layer_path: bpy.props.StringProperty()
-    bl_image_name: bpy.props.StringProperty()
+    image_name: bpy.props.StringProperty()
 
     def execute(self, context):
-        global test_layered_file
-        try:
-            layered_file = psapi.LayeredFile.read(testPSDpath)
-        except Exception as e:
-            self.report({'ERROR'}, f"Could not read PSD: {e}")
+        # Try to find image to save
+        img = None
+        if self.image_name:
+            img = bpy.data.images.get(self.image_name)
+        else:
+            # Default to active image in editor
+            for area in context.screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    img = area.spaces.active.image
+                    break
+        
+        if not img:
+            self.report({'ERROR'}, "No image found to save.")
             return {'CANCELLED'}
 
-        if not layered_file or self.bl_image_name not in bpy.data.images:
+        # Get Metadata
+        psd_path = img.get("psd_path", context.scene.bpsd_props.active_psd_path)
+        target_layer = img.get("psd_layer_path", self.layer_path)
+        is_mask = img.get("psd_is_mask", False)
+
+        if not target_layer:
+            self.report({'ERROR'}, "Image is not linked to a PSD layer.")
             return {'CANCELLED'}
 
-        bl_image = bpy.data.images[self.bl_image_name]
-        layer = layered_file.find_layer(self.layer_path)
+        # Write
+        pixels = np.array(img.pixels)
+        w, h = img.size
         
-        # Convert Blender pixels to PSAPI format
-        new_data = blender_to_psapi_data(bl_image)
-        
-        # Update layer pixels (Direct replacement in memory)
-        for channel_id, data in new_data.items():
-            layer[channel_id] = data
-            
-        # Write back to file
-        layered_file.write(testPSDpath)
-        
-        self.report({'INFO'}, f"Saved {bl_image.name} back to PSD")
-        return {'FINISHED'}
+        success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask)
+
+        if success:
+            # img.is_dirty = False
+            self.report({'INFO'}, f"Saved {img.name}")
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, "Write failed.")
+            return {'CANCELLED'}
