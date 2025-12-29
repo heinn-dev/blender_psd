@@ -12,48 +12,29 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         props = context.scene.bpsd_props
 
         # 1. Connection Header
-        col = layout.column(align=True)
-        row = col.row(align=True)
+        sync_col = layout.column(align=True)
         
-        # A. The Dropdown (ALWAYS ENABLED)
-        # We draw this directly into the main row
-        row.prop(props, "active_psd_image", text="") 
-        
-        # B. The Connect Button (CONDITIONALLY ENABLED)
-        # We check if we have a valid path
+        # dropdown
+        sync_col.prop(props, "active_psd_image", text="") 
         is_valid = (props.active_psd_path != "")
-        # Create a sub-layout inside the row just for the button.
-        # This keeps the visual alignment (stuck together) but isolates the 'enabled' state.
-        sub = row.row(align=True)
-        sub.enabled = is_valid
-        sub.operator("bpsd.connect_psd", icon='FILE_REFRESH', text="Sync this file")
-        row.prop(props, "auto_sync_incoming", text="", icon='FILE_REFRESH' if props.auto_sync_incoming else 'CANCEL')
+        
+        # connect button (add disconnect too?)
+        row = sync_col.row(align=True)
+        row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text="Sync file")
+        row.enabled = is_valid
+        
+        row = sync_col.row(align=True)
+        row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='FILE_REFRESH' if props.auto_sync_incoming else 'CANCEL')
+        row.prop(props, "auto_refresh_ps", text="Sync to PS", icon='FILE_REFRESH' if props.auto_refresh_ps else 'CANCEL')
 
-        # Optional: Debug Path Label
-        if is_valid:
-            col.label(text=f"Path: {props.active_psd_path}", icon='FILE_FOLDER')
-
-        if len(props.layer_list) > 0:
-            col = layout.column(align=True)
-            
-            row = col.row(align=True)
-            row.operator("bpsd.save_all_layers", text="Save All Changes", icon='FILE_TICK')
-            
-            row.prop(props, "auto_refresh_ps", text="", icon='FILE_REFRESH')
-            row.operator("bpsd.reload_all", text="Reload All", icon='FILE_REFRESH')
-            
-            row = col.row(align=True)
-            row.operator("bpsd.clean_orphans", text="Purge Old Layers", icon='TRASH')
-            
         layout.separator()
         layout.label(text="Layers", icon ="RENDERLAYERS")
-        layout.separator()
 
         if len(props.layer_list) == 0:
             return
 
-        layout_stack = [layout]
-        current_indent = -1
+        layout_stack = [layout.box()]
+        current_indent = 0
 
         for i, item in enumerate(props.layer_list):
 
@@ -73,12 +54,14 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 current_layout = parent_layout
 
             row = current_layout.row(align=True)
-            row.alignment = 'LEFT'
+
 
             is_active_row = (i == props.active_layer_index)
+            ind = current_indent
 
             if item.layer_type == "GROUP":
                 icon = 'FILE_FOLDER'
+                ind -= 1
             elif item.layer_type == "SMART":
                 icon = 'OUTLINER_DATA_LATTICE'
             elif item.layer_type == "SPECIAL":
@@ -87,6 +70,9 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 icon = 'FILE'
             else:
                 icon = 'IMAGE_DATA'
+                
+            row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
+            row.alignment = 'LEFT'
 
             if item.layer_type in {"GROUP", "SMART", "SPECIAL", "UNKNOWN"}:
                 row.label(text=item.name, icon=icon)
@@ -105,7 +91,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 mask_sub.alert = (is_active_row and props.active_is_mask)
                 mask_sub.alignment = 'LEFT'
 
-                op = mask_sub.operator( "bpsd.select_layer", text="Mask", icon='MOD_MASK', emboss=False )
+                op = mask_sub.operator( "bpsd.select_layer", icon='MOD_MASK', emboss=False, text="" ) #  text="Mask"
                 op.index = i
                 op.path = item.path
                 op.is_mask = True
@@ -113,14 +99,20 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             if item.layer_type == "GROUP":
                 layout_stack.append(current_layout)
                 current_indent += 1
+    
+        layout.separator()
+        layout.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
+        
+        
 
 class BPSD_PT_layer_context(bpy.types.Panel):
-    bl_label = "Layer Operations"
+    bl_label = "Debug"
     bl_idname = "BPSD_PT_layer_context"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'BPSD'
     bl_parent_id = "BPSD_PT_main_panel"
+    bl_options = {"DEFAULT_CLOSED"}
     
     @classmethod
     def poll(cls, context):
@@ -132,9 +124,14 @@ class BPSD_PT_layer_context(bpy.types.Panel):
         props = context.scene.bpsd_props
         item = props.layer_list[props.active_layer_index]
         
+        col = layout.column()
+        col.operator("bpsd.reload_all", text="Reload All Synced", icon='FILE_REFRESH')
+        col.operator("bpsd.clean_orphans", text="Purge Old Layers", icon='TRASH')
+        
         layout.label(text=f"Selected: {item.name}", icon='PREFERENCES')
         
         box = layout.box()
+        box = box.row()
         
         row = box.row()
         op = row.operator("bpsd.load_layer", text="Force Load", icon='TEXTURE')

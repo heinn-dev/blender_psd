@@ -143,6 +143,7 @@ class BPSDPreferences(bpy.types.AddonPreferences):
 class BPSD_OT_connect_psd(bpy.types.Operator):
     bl_idname = "bpsd.connect_psd"
     bl_label = "Connect"
+    bl_description = "Keep the selected file in sync"
 
     def execute(self, context):
         

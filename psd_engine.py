@@ -153,6 +153,8 @@ def read_all_layers(psd_path, requests):
             h = req['height']
             mask = req['is_mask']
             
+            # if req['layer_type'] in ['SPECIAL','UNKNOWN']: continue
+            
             pixels = _read_layer_internal(layered_file, path, w, h, mask)
             
             if pixels is not None:
@@ -253,8 +255,11 @@ def write_all_layers(psd_path, updates):
 
 def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask):
     layer = layered_file.find_layer(layer_path)
-    if not layer: return False
+    if not layer: 
+        print(f"Can't save {layer_path} ?")
+        return False
 
+    print(f"Saving {layer_path}, as mask : {is_mask}")
     # 1. Parse Blender Data
     pixels = np.array(blender_pixels).reshape((canvas_h, canvas_w, 4))
     pixels = np.flipud(pixels)
@@ -263,7 +268,6 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
     # --- MASK PATH ---
     if is_mask:
         try:
-            # STRATEGY CHANGE: Force Full Canvas for Masks.
             # Photoshop auto-crops masks, making them too small to "Stamp" into 
             # if we paint new areas in Blender.
             # We simply replace the mask with the full Blender Canvas to ensure
@@ -327,5 +331,8 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
 def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False):
     layered_file = psapi.LayeredFile.read(psd_path)
     write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask)
+    print("writing...")
     layered_file.write(psd_path)
+    print("done")
+    
     return True

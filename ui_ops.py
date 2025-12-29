@@ -114,7 +114,7 @@ def is_photoshop_file_unsaved(target_psd_path):
 class BPSD_OT_select_layer(bpy.types.Operator):
     bl_idname = "bpsd.select_layer"
     bl_label = "Select Layer"
-    bl_description = "Select this layer and show it in the Image Editor"
+    bl_description = "Select layer and show it in the Image Editor"
     bl_options = {'INTERNAL'} 
     
     index: bpy.props.IntProperty()# type: ignore
