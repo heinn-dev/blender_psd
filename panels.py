@@ -53,7 +53,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             return
 
         layout_stack = [layout]
-        current_indent = 0
+        current_indent = -1
 
         for i, item in enumerate(props.layer_list):
 
@@ -81,10 +81,14 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 icon = 'FILE_FOLDER'
             elif item.layer_type == "SMART":
                 icon = 'OUTLINER_DATA_LATTICE'
+            elif item.layer_type == "SPECIAL":
+                icon = 'CURVE_DATA'
+            elif item.layer_type == "UNKNOWN":
+                icon = 'FILE'
             else:
                 icon = 'IMAGE_DATA'
 
-            if item.layer_type in {"GROUP", "SMART"}:
+            if item.layer_type in {"GROUP", "SMART", "SPECIAL", "UNKNOWN"}:
                 row.label(text=item.name, icon=icon)
             else:
                 layer_sub = row.row(align=True)
@@ -97,7 +101,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 op.is_mask = False
 
             if item.has_mask:
-                
                 mask_sub = row.row(align=True)
                 mask_sub.alert = (is_active_row and props.active_is_mask)
                 mask_sub.alignment = 'LEFT'

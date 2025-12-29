@@ -19,17 +19,22 @@ def read_file(path):
                 case psapi.GroupLayer_8bit():
                     layer_type = "GROUP"
                     is_group = True
-
-                case psapi.Layer_8bit():
-                    layer_type = "LAYER"
                     
                 case psapi.SmartObjectLayer_8bit():
                     layer_type = "SMART"
-
+                    
+                case psapi.Layer_8bit():
+                    layer_type = "LAYER"
+                    
                 case _:
-                    layer_type = "SPECIAL"
+                    layer_type = "UNKNOWN"
             
             has_mask = layer.has_mask()
+
+            # adjustments layer unfortunately can't be parsed yet
+            if layer_name == "":
+                layer_type = "SPECIAL"
+                layer_name = "---"
 
             node = {
                 "name": layer_name,
