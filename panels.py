@@ -131,8 +131,13 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 layout_stack.append(current_layout)
                 current_indent += 1
     
+        psd_name = props.active_psd_path.replace("\\", "/")
+        psd_name = psd_name.split("/")[-1]
+        layout.box().operator("bpsd.highlight_psd", text=f"{psd_name}", icon='IMAGE_DATA',emboss=False)
         layout.separator()
-        layout.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
+        
+        row = layout.row(align=True)
+        row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
         
         
 

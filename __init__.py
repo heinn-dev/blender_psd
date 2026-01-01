@@ -238,6 +238,30 @@ class BPSD_OT_stop_sync(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class BPSD_OT_highlight_psd(bpy.types.Operator):
+    bl_idname = "bpsd.highlight_psd"
+    bl_label = "Highlight PSD"
+    bl_description = "Show the main PSD file in the Image Editor"
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+
+        if props.active_psd_image == 'NONE':
+            self.report({'WARNING'}, "No PSD file loaded.")
+            return {'CANCELLED'}
+
+        img = bpy.data.images.get(props.active_psd_image)
+        if not img:
+            self.report({'ERROR'}, "Image not found.")
+            return {'CANCELLED'}
+
+        # Use the helper from ui_ops to focus the image editor
+        ui_ops.focus_image_editor(context, img)
+        props.active_layer_index = -1
+
+        return {'FINISHED'}
+
+
 def auto_sync_check():
     context = bpy.context
     if not context.scene: return 1.0
@@ -284,6 +308,7 @@ classes = (
     BPSD_SceneProperties,
     BPSD_OT_connect_psd,
     BPSD_OT_stop_sync,
+    BPSD_OT_highlight_psd,
     ui_ops.BPSD_OT_select_layer,
     ui_ops.BPSD_OT_load_layer,
     ui_ops.BPSD_OT_save_layer,
