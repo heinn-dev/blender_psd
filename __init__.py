@@ -147,8 +147,16 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
     bl_description = "Keep the selected file in sync"
 
     def execute(self, context):
-        
+
         props = context.scene.bpsd_props
+
+        # Resolve path from dropdown if not already set
+        if not props.active_psd_path and props.active_psd_image != 'NONE':
+            img = bpy.data.images.get(props.active_psd_image)
+            if img:
+                abs_path = bpy.path.abspath(img.filepath)
+                props.active_psd_path = os.path.normpath(abs_path)
+
         path = props.active_psd_path
         
         # file = psd_engine.read_file(path)
@@ -179,21 +187,28 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             bpy.ops.bpsd.clean_orphans('EXEC_DEFAULT')
         
         bpy.ops.bpsd.reload_all('EXEC_DEFAULT')
-        
+
         if os.path.exists(props.active_psd_path):
             props.last_known_mtime = os.path.getmtime(props.active_psd_path)
-            
+
+        # Also reload the main PSD image in Blender if it exists
+        if props.active_psd_image != 'NONE':
+            main_img = bpy.data.images.get(props.active_psd_image)
+            if main_img:
+                main_img.reload()
+
         self.report({'INFO'}, "Connected!")
         return {'FINISHED'}
     
     @classmethod
     def poll(cls, context):
-        # The button is only clickable if a path is set
-        return context.scene.bpsd_props.active_psd_path != ""
+        # The button is clickable if a valid PSD is selected in the dropdown
+        props = context.scene.bpsd_props
+        return props.active_psd_image != 'NONE' and props.active_psd_image in bpy.data.images
 
     def flatten_tree(self, nodes, collection, indent):
         # Reverse to show top layers first
-        for node in nodes: 
+        for node in nodes:
             item = collection.add()
             item.name = node['name']
             item.path = node['path']
@@ -201,9 +216,26 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             item.has_mask = node.get('has_mask', False)
             item.indent = indent
             item.is_clipping_mask = node['is_clipping_mask']
-            
+
             if node['children']:
                 self.flatten_tree(node['children'], collection, indent + 1)
+
+
+class BPSD_OT_stop_sync(bpy.types.Operator):
+    bl_idname = "bpsd.stop_sync"
+    bl_label = "Stop Sync"
+    bl_description = "Stop syncing the current file"
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+        props.layer_list.clear()
+        props.active_psd_path = ""
+        props.active_layer_index = -1
+        props.active_layer_path = ""
+        props.last_known_mtime_str = "0.0"
+
+        self.report({'INFO'}, "Sync stopped")
+        return {'FINISHED'}
 
 
 def auto_sync_check():
@@ -251,6 +283,7 @@ classes = (
     BPSD_LayerItem,
     BPSD_SceneProperties,
     BPSD_OT_connect_psd,
+    BPSD_OT_stop_sync,
     ui_ops.BPSD_OT_select_layer,
     ui_ops.BPSD_OT_load_layer,
     ui_ops.BPSD_OT_save_layer,

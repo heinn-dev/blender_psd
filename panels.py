@@ -1,4 +1,5 @@
 import bpy
+import os
 
 class BPSD_PT_main_panel(bpy.types.Panel):
     bl_label = "Photoshop Sync"
@@ -6,22 +7,41 @@ class BPSD_PT_main_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'BPSD'
-    
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.bpsd_props
 
         # 1. Connection Header
         sync_col = layout.column(align=True)
-        
+
         # dropdown
-        sync_col.prop(props, "active_psd_image", text="") 
-        is_valid = (props.active_psd_path != "")
-        
+        sync_col.prop(props, "active_psd_image", text="")
+        # Check validity from dropdown selection directly (not just active_psd_path)
+        is_valid = props.active_psd_image != "NONE" and props.active_psd_image in bpy.data.images
+
+        # Check if dropdown selection matches currently synced file
+        is_already_synced = False
+        if is_valid and props.active_psd_path and len(props.layer_list) > 0:
+            img = bpy.data.images.get(props.active_psd_image)
+            if img:
+                selected_path = os.path.normpath(bpy.path.abspath(img.filepath))
+                synced_path = os.path.normpath(props.active_psd_path)
+                is_already_synced = (selected_path == synced_path)
+
         # connect button (add disconnect too?)
         row = sync_col.row(align=True)
-        row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text="Sync file")
+        button_text = "Reload from disk" if is_already_synced else "Sync file"
+        row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text=button_text)
+
+        if is_already_synced:
+            row.operator("bpsd.stop_sync", text="", icon='X')
+
         row.enabled = is_valid
+
+        # Show currently synced file
+        if props.active_psd_path and len(props.layer_list) > 0:
+            sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
         
         row = sync_col.row(align=True)
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='FILE_REFRESH' if props.auto_sync_incoming else 'CANCEL')
@@ -29,9 +49,8 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.enabled = is_valid
 
         
-        # if len(props.layer_list) == 0:
-            # return
         if not is_valid: return
+        if len(props.layer_list) == 0: return
         
         layout.separator()
         layout.label(text="Layers", icon ="RENDERLAYERS")

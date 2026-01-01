@@ -250,6 +250,15 @@ class BPSD_OT_save_layer(bpy.types.Operator):
 
         if success:
             self.report({'INFO'}, f"Saved {img.name}")
+
+            # Also reload the main PSD image in Blender if it exists
+            # (Since we wrote to the file, the composite might have changed)
+            props = context.scene.bpsd_props
+            if props.active_psd_image != 'NONE':
+                main_img = bpy.data.images.get(props.active_psd_image)
+                if main_img:
+                    main_img.reload()
+
             return {'FINISHED'}
         else:
             self.report({'ERROR'}, "Write failed.")
@@ -316,7 +325,14 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
                     self.report({'INFO'}, "Saved & Refreshed Photoshop.")
             else:
                 self.report({'INFO'}, "Saved to disk.")
-                
+
+            # Also reload the main PSD image in Blender if it exists
+            # (In case the save operation modified the PSD structure/composite)
+            if props.active_psd_image != 'NONE':
+                main_img = bpy.data.images.get(props.active_psd_image)
+                if main_img:
+                    main_img.reload()
+
             return {'FINISHED'}
 
 # --- PURGE OPERATOR ---
@@ -402,10 +418,10 @@ class BPSD_OT_reload_all(bpy.types.Operator):
         # 2. Batch Read
         self.report({'INFO'}, f"Reloading {len(requests)} layers...")
         results = psd_engine.read_all_layers(active_psd, requests)
-        
+
         if os.path.exists(props.active_psd_path):
             props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
-        
+
         # 3. Update Blender Images
         success_count = 0
         for img in images_to_reload:
@@ -418,6 +434,12 @@ class BPSD_OT_reload_all(bpy.types.Operator):
                     success_count += 1
                 except Exception as e:
                     print(f"Failed to update image {img.name}: {e}")
-        
+
+        # 4. Reload the main PSD file if it's loaded in Blender
+        if props.active_psd_image != 'NONE':
+            main_img = bpy.data.images.get(props.active_psd_image)
+            if main_img:
+                main_img.reload()
+
         self.report({'INFO'}, f"Reloaded {success_count} layers.")
         return {'FINISHED'}
