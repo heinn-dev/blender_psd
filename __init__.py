@@ -268,10 +268,17 @@ def auto_sync_check():
     
     props = context.scene.bpsd_props
     path = props.active_psd_path
-    
+
     if not props.auto_sync_incoming or not path or not os.path.exists(path):
         return 2.0
-        
+
+    # SAFETY CHECK: Reload main PSD if modified in Blender (since we can't save it back)
+    if props.active_psd_image != 'NONE':
+        main_img = bpy.data.images.get(props.active_psd_image)
+        if main_img and main_img.is_dirty:
+            print(f"BPSD: Reverting accidental changes to {main_img.name}")
+            main_img.reload()
+
     try:
         # 1. Get exact OS time
         current_mtime = os.path.getmtime(path)
