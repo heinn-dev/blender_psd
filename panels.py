@@ -26,14 +26,22 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row = sync_col.row(align=True)
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='FILE_REFRESH' if props.auto_sync_incoming else 'CANCEL')
         row.prop(props, "auto_refresh_ps", text="Sync to PS", icon='FILE_REFRESH' if props.auto_refresh_ps else 'CANCEL')
+        row.enabled = is_valid
 
+        
+        # if len(props.layer_list) == 0:
+            # return
+        if not is_valid: return
+        
         layout.separator()
         layout.label(text="Layers", icon ="RENDERLAYERS")
 
-        if len(props.layer_list) == 0:
-            return
+        root_box = layout.box()
+        # Create an aligned column inside it (just like you do for groups)
+        root_col = root_box.column(align=True) 
 
-        layout_stack = [layout.box()]
+        # Start the stack with the aligned column
+        layout_stack = [root_col]
         current_indent = 0
 
         for i, item in enumerate(props.layer_list):
@@ -64,17 +72,21 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 ind -= 1
             elif item.layer_type == "SMART":
                 icon = 'OUTLINER_DATA_LATTICE'
-            elif item.layer_type == "SPECIAL":
+            elif item.layer_type == "ADJUSTMENT":
                 icon = 'CURVE_DATA'
             elif item.layer_type == "UNKNOWN":
                 icon = 'FILE'
             else:
                 icon = 'IMAGE_DATA'
                 
+                
             row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
             row.alignment = 'LEFT'
-
-            if item.layer_type in {"GROUP", "SMART", "SPECIAL", "UNKNOWN"}:
+            
+            if item.is_clipping_mask:
+                row.label(text='', icon = 'TRACKING_FORWARDS')
+                        
+            if item.layer_type in {"GROUP", "SMART", "ADJUSTMENT", "UNKNOWN"}:
                 row.label(text=item.name, icon=icon)
             else:
                 layer_sub = row.row(align=True)

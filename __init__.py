@@ -25,6 +25,7 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     layer_type: bpy.props.StringProperty() # type: ignore
     indent: bpy.props.IntProperty(default=0)# type: ignore
     has_mask: bpy.props.BoolProperty(default=False)# type: ignore
+    is_clipping_mask: bpy.props.BoolProperty(default=False)# type: ignore
 
 
 class BPSD_SceneProperties(bpy.types.PropertyGroup):
@@ -159,6 +160,11 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             self.report({'ERROR'}, "Could not read PSD.")
             return {'CANCELLED'}
         
+        for layer in tree_data:
+            if layer['layer_type'] == "UNKNOWN":
+                self.report({'WARNING'}, f"A layer could not be read, this might cause data loss upon save!")
+                
+        
         props.psd_width = w
         props.psd_height = h
 
@@ -191,9 +197,10 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             item = collection.add()
             item.name = node['name']
             item.path = node['path']
-            item.layer_type = node['type']
+            item.layer_type = node['layer_type']
             item.has_mask = node.get('has_mask', False)
             item.indent = indent
+            item.is_clipping_mask = node['is_clipping_mask']
             
             if node['children']:
                 self.flatten_tree(node['children'], collection, indent + 1)

@@ -297,7 +297,7 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
             return {'CANCELLED'}
 
         self.report({'INFO'}, f"Batch saving {len(updates)} layers...")
-        success = psd_engine.write_all_layers(active_psd, updates)
+        success = psd_engine.write_all_layers(active_psd, updates,props.psd_width, props.psd_height)
 
         if os.path.exists(props.active_psd_path):
             props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))

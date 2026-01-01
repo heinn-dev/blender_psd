@@ -20,6 +20,9 @@ def read_file(path):
                     layer_type = "GROUP"
                     is_group = True
                     
+                case psapi.AdjustmentLayer_8bit():
+                    layer_type = "ADJUSTMENT"
+                    
                 case psapi.SmartObjectLayer_8bit():
                     layer_type = "SMART"
                     
@@ -31,20 +34,21 @@ def read_file(path):
             
             has_mask = layer.has_mask()
 
-            # adjustments layer unfortunately can't be parsed yet
+            # this happened when adjustment layers weren't a thing, safe to assume it's broke if null name?
             if layer_name == "":
-                layer_type = "SPECIAL"
+                layer_type = "UNKNOWN"
                 layer_name = "---"
 
             node = {
                 "name": layer_name,
                 "path": full_path,
-                "type": layer_type,
+                "layer_type": layer_type,
                 "has_mask": has_mask,
+                "is_clipping_mask" : layer.clipping_mask,
                 "children": []
             }
             
-            print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
+            # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
             
             if is_group:
                 for child in layer.layers:
@@ -65,9 +69,6 @@ def read_file(path):
 
 # --- HELPER: Internal Read Logic (Refactored) ---
 def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mask):
-    """
-    Internal function that assumes layered_file is already open.
-    """
     layer = layered_file.find_layer(layer_path)
     if not layer: return None
 
@@ -167,10 +168,6 @@ def read_all_layers(psd_path, requests):
         return {}
 
 def paste_to_canvas(canvas, source_arr, canvas_w, canvas_h, offset_x, offset_y):
-    """
-    Reads FROM source_arr (Layer) and writes TO canvas (Blender).
-    Clips source_arr to fit within the canvas window.
-    """
     src_h, src_w = source_arr.shape
     
     # Destination (Canvas) bounds
@@ -190,30 +187,9 @@ def paste_to_canvas(canvas, source_arr, canvas_w, canvas_h, offset_x, offset_y):
 
 # --- HELPER 2: Stamp/Update (For Writing) ---
 def stamp_from_canvas(target_layer_arr, canvas_arr, offset_x, offset_y):
-    """
-    Reads FROM canvas_arr (Blender) and writes TO target_layer_arr (Layer).
-    Only updates the pixels of target_layer_arr that overlap with the canvas.
-    """
     layer_h, layer_w = target_layer_arr.shape
     canvas_h, canvas_w = canvas_arr.shape
-    
-    # We are calculating the Intersection of the Canvas relative to the Layer.
-    
-    # Coordinates of the "Update Window" in Layer Space
-    # offset_x is "Where does the Layer start relative to Canvas (0,0)?"
-    # Therefore, the Canvas starts at -offset_x relative to the Layer.
-    
-    # Let's verify the coordinate system:
-    # Canvas (0,0) is the global origin.
-    # Layer is at (layer_left, layer_top).
-    # We want to copy pixels FROM Canvas TO Layer.
-    
-    # Destination (Layer) Window
-    # The canvas covers the region (0, 0) to (canvas_w, canvas_h) in global space.
-    # Converted to Layer Space: (-offset_x, -offset_y)
-    
-    # Intersection of "Layer Rect (0,0,w,h)" and "Canvas Rect (-x, -y, cw, ch)"
-    
+      
     # Layer (Dest) Bounds
     dst_x1 = max(0, -offset_x)
     dst_y1 = max(0, -offset_y)
@@ -233,15 +209,13 @@ def stamp_from_canvas(target_layer_arr, canvas_arr, offset_x, offset_y):
 
 # --- ENGINE ---
 
-# (read_file and read_layer remain unchanged from previous correct version)
-
-def write_all_layers(psd_path, updates):
+def write_all_layers(psd_path, updates, canvas_w, canvas_h):
     try:
         layered_file = psapi.LayeredFile.read(psd_path)
         count = 0
         for data in updates:
             if write_to_layered_file(layered_file, data['layer_path'], data['pixels'], 
-                                   data['width'], data['height'], data['is_mask']):
+                                   canvas_w, canvas_h, data['is_mask']):
                 count += 1
 
         if count > 0:
