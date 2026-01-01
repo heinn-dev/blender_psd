@@ -7,17 +7,18 @@ import tempfile
 import subprocess
 
 # --- HELPER ---
-def tag_image(image, psd_path, layer_path, is_mask=False):
+def tag_image(image, psd_path, layer_path, layer_index, is_mask=False):
     image["psd_path"] = psd_path
     image["psd_layer_path"] = layer_path
+    image["psd_layer_index"] = layer_index
     image["psd_is_mask"] = is_mask
-    image["bpsd_managed"] = True 
+    image["bpsd_managed"] = True
 
-def find_loaded_image(psd_path, layer_path, is_mask):
+def find_loaded_image(psd_path, layer_index, is_mask):
     """Returns the bpy.types.Image if it exists, else None."""
     for img in bpy.data.images:
-        if (img.get("psd_path") == psd_path and 
-            img.get("psd_layer_path") == layer_path and
+        if (img.get("psd_path") == psd_path and
+            img.get("psd_layer_index") == layer_index and
             img.get("psd_is_mask", False) == is_mask):
             return img
     return None
@@ -128,7 +129,7 @@ class BPSD_OT_select_layer(bpy.types.Operator):
         props.active_layer_path = self.path
         props.active_is_mask = self.is_mask
         
-        existing_img = find_loaded_image(props.active_psd_path, self.path, self.is_mask)
+        existing_img = find_loaded_image(props.active_psd_path, self.index, self.is_mask)
         
         if existing_img:
             focus_image_editor(context, existing_img)
@@ -174,10 +175,13 @@ class BPSD_OT_load_layer(bpy.types.Operator):
             return {'CANCELLED'}
 
         # 3. Create Image
-        # layer_name = target_layer.split("/")[-1]
+        # Include layer index to disambiguate layers with identical names
         psd_name = props.active_psd_path.replace("\\", "/")
         psd_name = psd_name.split("/")[-1]
-        layer_name = psd_name + "/" + target_layer
+        layer_idx = props.active_layer_index
+        # Get display name from layer list (target_layer is now an index path like "0/2")
+        display_name = props.layer_list[layer_idx].name if layer_idx < len(props.layer_list) else target_layer
+        layer_name = f"{psd_name}/{layer_idx:03d}_{display_name}"
         img_name = f"{layer_name}_MASK" if is_mask else layer_name
 
         if img_name in bpy.data.images:
@@ -189,8 +193,8 @@ class BPSD_OT_load_layer(bpy.types.Operator):
 
         if len(pixels) > 0:
             img.pixels.foreach_set(pixels)
-            
-        tag_image(img, psd_path, target_layer, is_mask)
+
+        tag_image(img, psd_path, target_layer, layer_idx, is_mask)
         img.pack()
 
         # Colorspace
@@ -319,33 +323,33 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
 class BPSD_OT_clean_orphans(bpy.types.Operator):
     bl_idname = "bpsd.clean_orphans"
     bl_label = "Clean Unused Layers"
-    bl_description = "Delete Blender images that no longer match a layer in the current PSD"
+    bl_description = "Delete Blender images from the current PSD that no longer exist in the layer list"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         props = context.scene.bpsd_props
         active_psd = props.active_psd_path
-        
+
         valid_paths = set()
         for item in props.layer_list:
             valid_paths.add(item.path)
-        
+
         images_to_remove = []
-        
+
         for img in bpy.data.images:
             if not img.get("bpsd_managed"):
                 continue
-            
+
             img_psd = img.get("psd_path")
             img_layer = img.get("psd_layer_path")
-            
+
+            # Only clean images from the current active PSD
             if img_psd != active_psd:
-                images_to_remove.append(img)
                 continue
-                
+
+            # Remove if layer no longer exists in the PSD
             if img_layer not in valid_paths:
                 images_to_remove.append(img)
-                continue
         
         count = len(images_to_remove)
         if count == 0:
@@ -379,11 +383,13 @@ class BPSD_OT_reload_all(bpy.types.Operator):
             # (Assuming the PSD canvas size hasn't changed. 
             # If it has, user should probably re-connect first to update props)
             l_path = img.get("psd_layer_path")
+            l_index = img.get("psd_layer_index")
             is_mask = img.get("psd_is_mask", False)
-            
+
             images_to_reload.append(img)
             requests.append({
                 'layer_path': l_path,
+                'layer_index': l_index,
                 'width': img.size[0],
                 'height': img.size[1],
                 'is_mask': is_mask
@@ -403,8 +409,8 @@ class BPSD_OT_reload_all(bpy.types.Operator):
         # 3. Update Blender Images
         success_count = 0
         for img in images_to_reload:
-            key = (img["psd_layer_path"], img.get("psd_is_mask", False))
-            
+            key = (img.get("psd_layer_index"), img.get("psd_is_mask", False))
+
             if key in results:
                 try:
                     img.pixels = results[key]

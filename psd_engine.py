@@ -5,33 +5,34 @@ import numpy as np
 import photoshopapi as psapi
 
 def read_file(path):
-    
+
     try:
         layered_file = psapi.LayeredFile.read(path)
-        
-        def parse_layer_structure(layer, current_path=""):
+
+        def parse_layer_structure(layer, current_index_path="", child_index=0):
             layer_name = layer.name
-            full_path = f"{current_path}/{layer_name}" if current_path else layer_name
-            
+            # Use index-based path for unique identification
+            index_path = f"{current_index_path}/{child_index}" if current_index_path else str(child_index)
+
             is_group = False
-            
+
             match layer:
                 case psapi.GroupLayer_8bit():
                     layer_type = "GROUP"
                     is_group = True
-                    
+
                 case psapi.AdjustmentLayer_8bit():
                     layer_type = "ADJUSTMENT"
-                    
+
                 case psapi.SmartObjectLayer_8bit():
                     layer_type = "SMART"
-                    
+
                 case psapi.Layer_8bit():
                     layer_type = "LAYER"
-                    
+
                 case _:
                     layer_type = "UNKNOWN"
-            
+
             has_mask = layer.has_mask()
 
             # this happened when adjustment layers weren't a thing, safe to assume it's broke if null name?
@@ -41,35 +42,53 @@ def read_file(path):
 
             node = {
                 "name": layer_name,
-                "path": full_path,
+                "path": index_path,  # Now stores index path like "0/2/1"
                 "layer_type": layer_type,
                 "has_mask": has_mask,
-                "is_clipping_mask" : layer.clipping_mask,
+                "is_clipping_mask": layer.clipping_mask,
                 "children": []
             }
-            
+
             # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
-            
+
             if is_group:
-                for child in layer.layers:
-                    node["children"].append(parse_layer_structure(child, full_path))
-                    
+                for i, child in enumerate(layer.layers):
+                    node["children"].append(parse_layer_structure(child, index_path, i))
+
             return node
 
         structure = []
-        
-        for layer in layered_file.layers:
-            structure.append(parse_layer_structure(layer))
-            
+
+        for i, layer in enumerate(layered_file.layers):
+            structure.append(parse_layer_structure(layer, "", i))
+
         return structure, layered_file.width, layered_file.height
 
     except Exception as e:
         print(f"BPSD Engine Error (Read Structure): {e}")
         return []
 
+
+def get_layer_by_index_path(layered_file, index_path):
+    """Navigate to a layer using an index-based path like '0/2/1'."""
+    indices = [int(i) for i in index_path.split("/")]
+    current_layers = layered_file.layers
+
+    layer = None
+    for idx in indices:
+        if idx < len(current_layers):
+            layer = current_layers[idx]
+            # If this is a group, descend into its children for the next index
+            if hasattr(layer, 'layers'):
+                current_layers = layer.layers
+        else:
+            return None
+
+    return layer
+
 # --- HELPER: Internal Read Logic (Refactored) ---
 def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mask):
-    layer = layered_file.find_layer(layer_path)
+    layer = get_layer_by_index_path(layered_file, layer_path)
     if not layer: return None
 
     # --- MASK PATH ---
@@ -147,21 +166,22 @@ def read_all_layers(psd_path, requests):
     results = {}
     try:
         layered_file = psapi.LayeredFile.read(psd_path)
-        
+
         for req in requests:
             path = req['layer_path']
+            layer_index = req.get('layer_index')
             w = req['width']
             h = req['height']
             mask = req['is_mask']
-            
+
             # if req['layer_type'] in ['SPECIAL','UNKNOWN']: continue
-            
+
             pixels = _read_layer_internal(layered_file, path, w, h, mask)
-            
+
             if pixels is not None:
-                # Key the result by path AND type so we can map it back easily
-                results[(path, mask)] = pixels
-                
+                # Key the result by layer_index AND mask type so we can map it back easily
+                results[(layer_index, mask)] = pixels
+
         return results
     except Exception as e:
         print(f"BPSD Batch Read Error: {e}")
@@ -228,8 +248,8 @@ def write_all_layers(psd_path, updates, canvas_w, canvas_h):
         return False
 
 def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask):
-    layer = layered_file.find_layer(layer_path)
-    if not layer: 
+    layer = get_layer_by_index_path(layered_file, layer_path)
+    if not layer:
         print(f"Can't save {layer_path} ?")
         return False
 
