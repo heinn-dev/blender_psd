@@ -157,7 +157,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
         row.prop(props, "auto_save_on_image_save", text="", icon='CHECKMARK' if props.auto_save_on_image_save else 'CANCEL', toggle=True)
         
-        
 
 class BPSD_PT_layer_context(bpy.types.Panel):
     bl_label = "Debug"
@@ -193,3 +192,5 @@ class BPSD_PT_layer_context(bpy.types.Panel):
         
         row = box.row()
         op = row.operator("bpsd.save_layer", text="Force Save", icon='FILE_TICK')
+        
+        

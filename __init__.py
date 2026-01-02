@@ -15,6 +15,8 @@ import bpy
 
 from . import psd_engine
 from . import ui_ops
+from . import brush_ops
+from . import brush_panels
 from . import panels
 
 # --- DATA STRUCTURES ---
@@ -70,6 +72,19 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
 
     #last_known_mtime: bpy.props.FloatProperty(default=0.0) # type: ignore
     last_known_mtime_str: bpy.props.StringProperty(default="0.0") # type: ignore
+
+    show_cat_math: bpy.props.BoolProperty(name="Math", default=True)# type: ignore
+    show_cat_light: bpy.props.BoolProperty(name="Light", default=True)# type: ignore
+    show_cat_color: bpy.props.BoolProperty(name="Color", default=True)# type: ignore
+    show_cat_alpha: bpy.props.BoolProperty(name="Alpha", default=True)# type: ignore
+    show_cat_burn: bpy.props.BoolProperty(name="Burn", default=True)# type: ignore
+    show_cat_curves: bpy.props.BoolProperty(name="Curves", default=True)# type: ignore
+    show_cat_misc: bpy.props.BoolProperty(name="Misc", default=True)# type: ignore
+    show_frequent_only: bpy.props.BoolProperty(
+        name="Faves Only", 
+        description="Only show favourite brushes", 
+        default=False
+    )# type: ignore
 
     # --- HELPER: Dynamic Dropdown Generator ---
     def get_psd_images(self, context):
@@ -328,8 +343,15 @@ classes = (
     ui_ops.BPSD_OT_save_all_layers,
     ui_ops.BPSD_OT_clean_orphans,
     ui_ops.BPSD_OT_reload_all,
+        
     panels.BPSD_PT_main_panel,
     panels.BPSD_PT_layer_context,
+    
+    brush_ops.BPSD_OT_qb_brush_blend,
+    brush_ops.BPSD_OT_qb_brush_falloff,
+    brush_ops.BPSD_OT_qb_brush_set,
+    brush_ops.BPSD_OT_toggle_frequent,
+    brush_panels.BPSD_PT_quick_brushes,
     BPSDPreferences
 )
 
