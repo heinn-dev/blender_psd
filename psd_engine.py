@@ -51,7 +51,7 @@ def read_file(path):
                 "layer_id" : layer.layer_id,
                 "children": []
             }
-            print(f"layer {layer_name} has id {layer.layer_id}")
+            # print(f"layer {layer_name} has id {layer.layer_id}")
             # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
 
             if is_group:
@@ -427,8 +427,6 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
 def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False, layer_id=0):
     layered_file = psapi.LayeredFile.read(psd_path)
     write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask, layer_id)
-    print("writing...")
     layered_file.write(psd_path)
-    print("done")
 
     return True

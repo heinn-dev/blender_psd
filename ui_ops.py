@@ -6,6 +6,53 @@ from . import psd_engine
 import subprocess
 import time
 
+# --- CACHE & WATCHER ---
+DIRTY_STATE_CACHE = {}
+
+def init_dirty_cache():
+    DIRTY_STATE_CACHE.clear()
+    for img in bpy.data.images:
+        DIRTY_STATE_CACHE[img.name] = img.is_dirty
+
+def image_dirty_watcher():
+    """
+    Called via timer to poll for image dirty state changes.
+    We scan to see which managed image just became clean (Saved).
+    """
+    context = bpy.context
+    if not hasattr(context, "scene") or not context.scene:
+        return 0.5
+
+    props = context.scene.bpsd_props
+    if props.is_internal_operation:
+        return 0.5
+
+    images_to_save = []
+    for img in bpy.data.images:
+        if not img.get("bpsd_managed"):
+            continue
+
+        current_dirty = img.is_dirty
+        was_dirty = DIRTY_STATE_CACHE.get(img.name, False)
+        DIRTY_STATE_CACHE[img.name] = current_dirty
+
+        # Transition: Dirty -> Clean (User Saved)
+        if was_dirty and not current_dirty:
+            images_to_save.append(img.name)
+
+    if images_to_save:
+        def trigger_saves():
+            for name in images_to_save:
+                print(f"BPSD: Detected save on {name}, syncing to PSD...")
+                try:
+                    bpy.ops.bpsd.save_layer('EXEC_DEFAULT', image_name=name)
+                except Exception as e:
+                    print(f"BPSD Auto-Save Error: {e}")
+            return None
+        bpy.app.timers.register(trigger_saves, first_interval=0.01)
+
+    return 0.5
+
 # --- HELPER ---
 def tag_image(image, psd_path, layer_path, layer_index, is_mask=False, layer_id=0):
     image["psd_path"] = psd_path
@@ -226,78 +273,88 @@ class BPSD_OT_save_layer(bpy.types.Operator):
     bl_idname = "bpsd.save_layer"
     bl_label = "Save Layer"
     bl_description = "Write to PSD"
+    bl_options = {'REGISTER'}
 
     # Optional overrides
     layer_path: bpy.props.StringProperty()# type: ignore
     image_name: bpy.props.StringProperty()# type: ignore
-
+    
     @classmethod
     def poll(cls, context):
-        # We only want to intercept the shortcut if we are in the Image Editor
-        # and looking at a BPSD managed image.
-        if not context.area or context.area.type != 'IMAGE_EDITOR':
-            return False
+        # this doesnt' get called anyway?
+        # 1. Try to get the image from the context directly (most reliable in Image Editor)
+        img = getattr(context, "edit_image", None)
 
-        space = context.space_data
-        if not space or not isinstance(space, bpy.types.SpaceImageEditor):
-            return False
+        # 2. Fallback to checking the active space
+        if not img:
+            space = getattr(context, "space_data", None)
+            if space and getattr(space, "type", "") == 'IMAGE_EDITOR':
+                img = getattr(space, "image", None)
 
-        img = space.image
         if not img:
             return False
 
+        # Only intercept if it's a BPSD managed image
         return img.get("bpsd_managed", False)
 
     def execute(self, context):
-        # Try to find image to save
-        img = None
-        if self.image_name:
-            img = bpy.data.images.get(self.image_name)
-        else:
-            # Default to active image in editor
-            for area in context.screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    img = area.spaces.active.image
-                    break
-        
-        if not img:
-            self.report({'ERROR'}, "No image found to save.")
-            return {'CANCELLED'}
-
-        # Get Metadata
-        psd_path = img.get("psd_path", context.scene.bpsd_props.active_psd_path)
-        target_layer = img.get("psd_layer_path", self.layer_path)
-        is_mask = img.get("psd_is_mask", False)
-        layer_id = img.get("psd_layer_id", 0)
-
-        if not target_layer:
-            self.report({'ERROR'}, "Image is not linked to a PSD layer.")
-            return {'CANCELLED'}
-
-        # Write
-        pixels = np.array(img.pixels)
-        w, h = img.size # psd size?
-
-        # we shouldn't write to GROUP or SMART, unless we're writing the mask...
-        success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask, layer_id=layer_id)
-
-        if success:
-            img.pack()
-            self.report({'INFO'}, f"Saved {img.name}")
-            props = context.scene.bpsd_props
-
-            if props.auto_refresh_ps:
-                if is_photoshop_file_unsaved(props.active_psd_path):
-                    self.report({'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS).")
-                else:
-                    run_photoshop_refresh(props.active_psd_path)
-                    self.report({'INFO'}, "Saved & Refreshed Photoshop.")
+        # LOCK: Prevent recursive triggers from msgbus
+        context.scene.bpsd_props.is_internal_operation = True
+        try:
+            # Try to find image to save
+            img = None
+            if self.image_name:
+                img = bpy.data.images.get(self.image_name)
             else:
-                self.report({'INFO'}, "Saved to disk.")
-            return {'FINISHED'}
-        else:
-            self.report({'ERROR'}, "Write failed.")
-            return {'CANCELLED'}
+                # Default to active image in editor
+                for area in context.screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        img = area.spaces.active.image
+                        break
+
+            if not img:
+                self.report({'ERROR'}, "No image found to save.")
+                return {'CANCELLED'}
+
+            # Get Metadata
+            psd_path = img.get("psd_path", context.scene.bpsd_props.active_psd_path)
+            target_layer = img.get("psd_layer_path", self.layer_path)
+            is_mask = img.get("psd_is_mask", False)
+            layer_id = img.get("psd_layer_id", 0)
+
+            if not target_layer:
+                self.report({'ERROR'}, "Image is not linked to a PSD layer.")
+                return {'CANCELLED'}
+
+            # Write
+            pixels = np.array(img.pixels)
+            w, h = img.size # psd size?
+
+            # we shouldn't write to GROUP or SMART, unless we're writing the mask...
+            success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask, layer_id=layer_id)
+
+            if success:
+                img.pack()
+                # Update cache immediately to prevent loop
+                DIRTY_STATE_CACHE[img.name] = False
+
+                self.report({'INFO'}, f"Saved {img.name}")
+                props = context.scene.bpsd_props
+
+                if props.auto_refresh_ps:
+                    if is_photoshop_file_unsaved(props.active_psd_path):
+                        self.report({'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS).")
+                    else:
+                        run_photoshop_refresh(props.active_psd_path)
+                        self.report({'INFO'}, "Saved & Refreshed Photoshop.")
+                else:
+                    self.report({'INFO'}, "Saved to disk.")
+                return {'FINISHED'}
+            else:
+                self.report({'ERROR'}, "Write failed.")
+                return {'CANCELLED'}
+        finally:
+            context.scene.bpsd_props.is_internal_operation = False
 
 # --- SAVE ALL OPERATOR ---
 class BPSD_OT_save_all_layers(bpy.types.Operator):
@@ -307,79 +364,88 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
 
     def execute(self, context):
         props = context.scene.bpsd_props
-        active_psd = props.active_psd_path
-        
-        updates = []
-        processed_images = [] # Keep track to clear dirty flags later
-        
-        # we shouldn't write to GROUP or SMART, unless we're writing the mask...
-        for img in bpy.data.images:
-            if img.get("psd_path") != active_psd:
-                continue
-                
-            if not img.get("bpsd_managed"):
-                continue
-                
-            # since we do not write to disk on alt-s, we can't do this for now...
-            # I mean we can, just not really clear, hmm..
-            if not img.is_dirty:
-                continue
-            
-            layer_path = img.get("psd_layer_path")
-            is_mask = img.get("psd_is_mask", False)
-            layer_id = img.get("psd_layer_id", 0)
+        # LOCK
+        props.is_internal_operation = True
 
-            if not layer_path: continue
+        try:
+            active_psd = props.active_psd_path
 
-            updates.append({
-                'layer_path': layer_path,
-                'pixels': np.array(img.pixels), # Accessing pixels is heavy, do it here
-                'width': img.size[0],
-                'height': img.size[1],
-                'is_mask': is_mask,
-                'layer_id': layer_id
-            })
+            updates = []
+            processed_images = [] # Keep track to clear dirty flags later
 
-            processed_images.append(img)
+            # we shouldn't write to GROUP or SMART, unless we're writing the mask...
+            for img in bpy.data.images:
+                if img.get("psd_path") != active_psd:
+                    continue
 
-        if not updates:
-            self.report({'INFO'}, "No unsaved changes found.")
-            return {'CANCELLED'}
+                if not img.get("bpsd_managed"):
+                    continue
 
-        self.report({'INFO'}, f"Batch saving {len(updates)} layers...")
-        success = psd_engine.write_all_layers(active_psd, updates,props.psd_width, props.psd_height)
+                # since we do not write to disk on alt-s, we can't do this for now...
+                # I mean we can, just not really clear, hmm..
+                if not img.is_dirty:
+                    continue
 
-        # we have to let photoshop save so we can reload
-        # if os.path.exists(props.active_psd_path):
-        #     props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
-        
-        if success:
-            # Pack all images that were successfully saved
-            for img in processed_images:
-                try:
-                    img.pack()
-                except:
-                    pass
+                layer_path = img.get("psd_layer_path")
+                is_mask = img.get("psd_is_mask", False)
+                layer_id = img.get("psd_layer_id", 0)
 
-            # Cleanup...
-            if props.auto_refresh_ps:
-                if is_photoshop_file_unsaved(props.active_psd_path):
-                    self.report({'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS).")
+                if not layer_path: continue
+
+                updates.append({
+                    'layer_path': layer_path,
+                    'pixels': np.array(img.pixels), # Accessing pixels is heavy, do it here
+                    'width': img.size[0],
+                    'height': img.size[1],
+                    'is_mask': is_mask,
+                    'layer_id': layer_id
+                })
+
+                processed_images.append(img)
+
+            if not updates:
+                self.report({'INFO'}, "No unsaved changes found.")
+                return {'CANCELLED'}
+
+            self.report({'INFO'}, f"Batch saving {len(updates)} layers...")
+            success = psd_engine.write_all_layers(active_psd, updates,props.psd_width, props.psd_height)
+
+            # we have to let photoshop save so we can reload
+            # if os.path.exists(props.active_psd_path):
+            #     props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
+
+            if success:
+                # Pack all images that were successfully saved
+                for img in processed_images:
+                    try:
+                        img.pack()
+                        # Update cache immediately to prevent loop
+                        DIRTY_STATE_CACHE[img.name] = False
+                    except:
+                        pass
+
+                # Cleanup...
+                if props.auto_refresh_ps:
+                    if is_photoshop_file_unsaved(props.active_psd_path):
+                        self.report({'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS).")
+                    else:
+                        run_photoshop_refresh(props.active_psd_path)
+                        self.report({'INFO'}, "Saved & Refreshed Photoshop.")
                 else:
-                    run_photoshop_refresh(props.active_psd_path)
-                    self.report({'INFO'}, "Saved & Refreshed Photoshop.")
-            else:
-                self.report({'INFO'}, "Saved to disk.")
+                    self.report({'INFO'}, "Saved to disk.")
 
-            # Also reload the main PSD image in Blender if it exists
-            # (In case the save operation modified the PSD structure/composite)
-            # if props.active_psd_image != 'NONE':
-            #     main_img = bpy.data.images.get(props.active_psd_image)
-            #     if main_img:
-            #         # time.sleep(.2)
-            #         main_img.reload()
+                # Also reload the main PSD image in Blender if it exists
+                # (In case the save operation modified the PSD structure/composite)
+                # if props.active_psd_image != 'NONE':
+                #     main_img = bpy.data.images.get(props.active_psd_image)
+                #     if main_img:
+                #         # time.sleep(.2)
+                #         main_img.reload()
 
-            return {'FINISHED'}
+                return {'FINISHED'}
+
+        finally:
+            props.is_internal_operation = False
 
 # --- PURGE OPERATOR ---
 class BPSD_OT_clean_orphans(bpy.types.Operator):
@@ -429,7 +495,7 @@ class BPSD_OT_clean_orphans(bpy.types.Operator):
 
         count = len(images_to_remove)
         if count == 0:
-            self.report({'INFO'}, "No orphaned layers found.")
+            # self.report({'INFO'}, "No orphaned layers found.")
             return {'CANCELLED'}
             
         for img in images_to_remove:

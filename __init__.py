@@ -61,7 +61,14 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
         description="Automatically reload textures when the PSD file is saved in Photoshop",
         default=True
     ) # type: ignore
-    
+
+    is_internal_operation: bpy.props.BoolProperty(
+        name="Is Internal Operation",
+        description="Flag to prevent recursive triggers when the addon saves images",
+        default=False,
+        options={'SKIP_SAVE'}
+    ) # type: ignore
+
     #last_known_mtime: bpy.props.FloatProperty(default=0.0) # type: ignore
     last_known_mtime_str: bpy.props.StringProperty(default="0.0") # type: ignore
 
@@ -291,7 +298,7 @@ def auto_sync_check():
                 props.last_known_mtime_str = str(current_mtime) # Acknowledge change to prevent looping
                 return 1.0
 
-            print(f"BPSD: Change detected. Disk: {current_mtime} != Stored: {stored_mtime}")
+            # print(f"BPSD: Change detected. Disk: {current_mtime} != Stored: {stored_mtime}")
 
             # Update IMMEDIATELY to prevent double-triggering next tick
             props.last_known_mtime_str = str(current_mtime)
@@ -304,6 +311,9 @@ def auto_sync_check():
         print(f"BPSD Watcher Error: {e}")
         
     return 1.0
+
+# --- WATCHERS ---
+# Moved to ui_ops.py to prevent circular dependency loops
 
 # --- REGISTRATION ---
 
@@ -324,39 +334,31 @@ classes = (
     BPSDPreferences
 )
 
-addon_keymaps= []
-
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.bpsd_props = bpy.props.PointerProperty(type=BPSD_SceneProperties)
-    
-    wm = bpy.context.window_manager
-    kc = wm.keyconfigs.addon
-    if kc:
-        km = kc.keymaps.new(name='Image', space_type='IMAGE_EDITOR')
 
-        # Bind Alt+S to OUR operator (intercepts default Save)
-        kmi = km.keymap_items.new(
-            ui_ops.BPSD_OT_save_layer.bl_idname,
-            'S', 'PRESS', alt=True
-        )
-        addon_keymaps.append((km, kmi))
-        
+    # Initialize Cache
+    ui_ops.init_dirty_cache()
+
+    bpy.app.timers.register(ui_ops.image_dirty_watcher, persistent=True)
     bpy.app.timers.register(auto_sync_check, persistent=True)
-    
+
 def unregister():
     del bpy.types.Scene.bpsd_props
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-        
-    if auto_sync_check in bpy.app.timers.is_registered:
+
+    try:
+        bpy.app.timers.unregister(ui_ops.image_dirty_watcher)
+    except:
+        pass
+
+    try:
         bpy.app.timers.unregister(auto_sync_check)
-        
-    for km, kmi in addon_keymaps:
-        km.keymap_items.remove(kmi)
-    addon_keymaps.clear()
-        
+    except:
+        pass
 
 if __name__ == "__main__":
     register()
