@@ -231,6 +231,23 @@ class BPSD_OT_save_layer(bpy.types.Operator):
     layer_path: bpy.props.StringProperty()# type: ignore
     image_name: bpy.props.StringProperty()# type: ignore
 
+    @classmethod
+    def poll(cls, context):
+        # We only want to intercept the shortcut if we are in the Image Editor
+        # and looking at a BPSD managed image.
+        if not context.area or context.area.type != 'IMAGE_EDITOR':
+            return False
+
+        space = context.space_data
+        if not space or not isinstance(space, bpy.types.SpaceImageEditor):
+            return False
+
+        img = space.image
+        if not img:
+            return False
+
+        return img.get("bpsd_managed", False)
+
     def execute(self, context):
         # Try to find image to save
         img = None

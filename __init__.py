@@ -331,18 +331,17 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.Scene.bpsd_props = bpy.props.PointerProperty(type=BPSD_SceneProperties)
     
-    # wm = bpy.context.window_manager
-    # kc = wm.keyconfigs.addon
-    # if kc:
-    #     km = kc.keymaps.new(name='Image Generic', space_typfe='IMAGE_EDITOR')
-        
-    #     # uggh.... I don't remember if this respects anything about masks.
-    #     # Bind Ctrl+S to OUR operator
-    #     kmi = km.keymap_items.new(
-    #         ui_ops.BPSD_OT_save_layer.bl_idname, 
-    #         'S', 'PRESS', ctrl=True
-    #     )
-    #     addon_keymaps.append((km, kmi))
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon
+    if kc:
+        km = kc.keymaps.new(name='Image', space_type='IMAGE_EDITOR')
+
+        # Bind Alt+S to OUR operator (intercepts default Save)
+        kmi = km.keymap_items.new(
+            ui_ops.BPSD_OT_save_layer.bl_idname,
+            'S', 'PRESS', alt=True
+        )
+        addon_keymaps.append((km, kmi))
         
     bpy.app.timers.register(auto_sync_check, persistent=True)
     
