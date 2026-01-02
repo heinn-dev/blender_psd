@@ -111,9 +111,13 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             
             if item.is_clipping_mask:
                 row.label(text='', icon = 'TRACKING_FORWARDS')
-                        
+            
             if item.layer_type in {"GROUP", "SMART", "ADJUSTMENT", "UNKNOWN"}:
-                row.label(text=item.name, icon=icon)
+                # row.label(text=item.name, icon=icon)
+                layer_sub = row.row(align=True)
+                layer_sub.alignment = 'LEFT'
+                layer_sub.enabled = False
+                op = layer_sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False )
             else:
                 layer_sub = row.row(align=True)
                 layer_sub.alert = (is_active_row and not props.active_is_mask)

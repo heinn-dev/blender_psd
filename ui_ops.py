@@ -22,9 +22,9 @@ def find_loaded_image(psd_path, layer_index, is_mask, layer_id=0):
         if img.get("psd_is_mask", False) != is_mask: continue
 
         # 1. Try ID Match
-        if layer_id > 0:
-            if img.get("psd_layer_id") == layer_id:
-                return img
+        # if layer_id > 0:
+        if img.get("psd_layer_id") == layer_id:
+            return img
 
         # 2. Fallback to Index
         elif img.get("psd_layer_index") == layer_index:
