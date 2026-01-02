@@ -276,7 +276,7 @@ class BPSD_OT_save_layer(bpy.types.Operator):
 
         # Write
         pixels = np.array(img.pixels)
-        w, h = img.size
+        w, h = img.size # psd size?
 
         # we shouldn't write to GROUP or SMART, unless we're writing the mask...
         success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask, layer_id=layer_id)
@@ -284,15 +284,16 @@ class BPSD_OT_save_layer(bpy.types.Operator):
         if success:
             img.pack()
             self.report({'INFO'}, f"Saved {img.name}")
+            props = context.scene.bpsd_props
 
-            # Also reload the main PSD image in Blender if it exists
-            # (Since we wrote to the file, the composite might have changed)
-            # props = context.scene.bpsd_props
-            # if props.active_psd_image != 'NONE':
-            #     main_img = bpy.data.images.get(props.active_psd_image)
-            #     if main_img:
-            #         main_img.reload()
-
+            if props.auto_refresh_ps:
+                if is_photoshop_file_unsaved(props.active_psd_path):
+                    self.report({'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS).")
+                else:
+                    run_photoshop_refresh(props.active_psd_path)
+                    self.report({'INFO'}, "Saved & Refreshed Photoshop.")
+            else:
+                self.report({'INFO'}, "Saved to disk.")
             return {'FINISHED'}
         else:
             self.report({'ERROR'}, "Write failed.")
