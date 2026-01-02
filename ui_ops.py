@@ -7,20 +7,29 @@ import subprocess
 import time
 
 # --- HELPER ---
-def tag_image(image, psd_path, layer_path, layer_index, is_mask=False):
+def tag_image(image, psd_path, layer_path, layer_index, is_mask=False, layer_id=0):
     image["psd_path"] = psd_path
     image["psd_layer_path"] = layer_path
     image["psd_layer_index"] = layer_index
     image["psd_is_mask"] = is_mask
+    image["psd_layer_id"] = layer_id
     image["bpsd_managed"] = True
 
-def find_loaded_image(psd_path, layer_index, is_mask):
+def find_loaded_image(psd_path, layer_index, is_mask, layer_id=0):
     """Returns the bpy.types.Image if it exists, else None."""
     for img in bpy.data.images:
-        if (img.get("psd_path") == psd_path and
-            img.get("psd_layer_index") == layer_index and
-            img.get("psd_is_mask", False) == is_mask):
+        if img.get("psd_path") != psd_path: continue
+        if img.get("psd_is_mask", False) != is_mask: continue
+
+        # 1. Try ID Match
+        if layer_id > 0:
+            if img.get("psd_layer_id") == layer_id:
+                return img
+
+        # 2. Fallback to Index
+        elif img.get("psd_layer_index") == layer_index:
             return img
+
     return None
 
 def focus_image_editor(context, image):
@@ -116,31 +125,33 @@ class BPSD_OT_select_layer(bpy.types.Operator):
     bl_idname = "bpsd.select_layer"
     bl_label = "Select Layer"
     bl_description = "Select layer and show it in the Image Editor"
-    bl_options = {'INTERNAL'} 
-    
+    bl_options = {'INTERNAL'}
+
     index: bpy.props.IntProperty()# type: ignore
     path: bpy.props.StringProperty()# type: ignore
     is_mask : bpy.props.BoolProperty()# type: ignore
-    
+    layer_id: bpy.props.IntProperty(default=0)# type: ignore
+
     def execute(self, context):
         props = context.scene.bpsd_props
-        
+
         props.active_layer_index = self.index
         props.active_layer_path = self.path
         props.active_is_mask = self.is_mask
-        
-        existing_img = find_loaded_image(props.active_psd_path, self.index, self.is_mask)
-        
+
+        existing_img = find_loaded_image(props.active_psd_path, self.index, self.is_mask, self.layer_id)
+
         if existing_img:
             focus_image_editor(context, existing_img)
-            
+
         elif props.auto_load_on_select:
             bpy.ops.bpsd.load_layer(
-                'EXEC_DEFAULT', 
-                layer_path=self.path, 
+                'EXEC_DEFAULT',
+                layer_path=self.path,
+                layer_id=self.layer_id
             )
             # Note: The load_layer op handles the focusing itself upon completion.
-            
+
         return {'FINISHED'}
 
 
@@ -152,23 +163,27 @@ class BPSD_OT_load_layer(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     layer_path: bpy.props.StringProperty()  # type: ignore
+    layer_id: bpy.props.IntProperty(default=0)  # type: ignore
 
     def execute(self, context):
         # 1. Resolve Data
         props = context.scene.bpsd_props
         psd_path = props.active_psd_path
         is_mask = props.active_is_mask
-        
+
         # If no path arg provided, use selected layer
         target_layer = self.layer_path if self.layer_path else props.active_layer_path
+        # Note: If called without args, self.layer_id defaults to 0.
+        # But usually we call it via select_layer which passes it.
+        # If manual call, we might miss ID, but that falls back to path.
 
         if not psd_path or not target_layer:
             self.report({'ERROR'}, "No layer selected.")
             return {'CANCELLED'}
 
         # 2. Call Engine
-        pixels, w, h = psd_engine.read_layer(psd_path, target_layer, props.psd_width, props.psd_height, fetch_mask=is_mask)
-        
+        pixels, w, h = psd_engine.read_layer(psd_path, target_layer, props.psd_width, props.psd_height, fetch_mask=is_mask, layer_id=self.layer_id)
+
         # in photoshop, empty layers have zero pixels
         if pixels is None:
             self.report({'ERROR'}, "Failed to read layer.")
@@ -194,7 +209,7 @@ class BPSD_OT_load_layer(bpy.types.Operator):
         if len(pixels) > 0:
             img.pixels.foreach_set(pixels)
 
-        tag_image(img, psd_path, target_layer, layer_idx, is_mask)
+        tag_image(img, psd_path, target_layer, layer_idx, is_mask, self.layer_id)
         img.pack()
 
         # Colorspace
@@ -236,6 +251,7 @@ class BPSD_OT_save_layer(bpy.types.Operator):
         psd_path = img.get("psd_path", context.scene.bpsd_props.active_psd_path)
         target_layer = img.get("psd_layer_path", self.layer_path)
         is_mask = img.get("psd_is_mask", False)
+        layer_id = img.get("psd_layer_id", 0)
 
         if not target_layer:
             self.report({'ERROR'}, "Image is not linked to a PSD layer.")
@@ -244,9 +260,9 @@ class BPSD_OT_save_layer(bpy.types.Operator):
         # Write
         pixels = np.array(img.pixels)
         w, h = img.size
-        
+
         # we shouldn't write to GROUP or SMART, unless we're writing the mask...
-        success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask)
+        success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask, layer_id=layer_id)
 
         if success:
             img.pack()
@@ -293,7 +309,8 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
             
             layer_path = img.get("psd_layer_path")
             is_mask = img.get("psd_is_mask", False)
-            
+            layer_id = img.get("psd_layer_id", 0)
+
             if not layer_path: continue
 
             updates.append({
@@ -301,9 +318,10 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
                 'pixels': np.array(img.pixels), # Accessing pixels is heavy, do it here
                 'width': img.size[0],
                 'height': img.size[1],
-                'is_mask': is_mask
+                'is_mask': is_mask,
+                'layer_id': layer_id
             })
-            
+
             processed_images.append(img)
 
         if not updates:
@@ -357,8 +375,12 @@ class BPSD_OT_clean_orphans(bpy.types.Operator):
         active_psd = props.active_psd_path
 
         valid_paths = set()
+        valid_ids = set()
+
         for item in props.layer_list:
             valid_paths.add(item.path)
+            if item.layer_id > 0:
+                valid_ids.add(item.layer_id)
 
         images_to_remove = []
 
@@ -368,15 +390,25 @@ class BPSD_OT_clean_orphans(bpy.types.Operator):
 
             img_psd = img.get("psd_path")
             img_layer = img.get("psd_layer_path")
+            img_id = img.get("psd_layer_id", 0)
 
             # Only clean images from the current active PSD
             if img_psd != active_psd:
                 continue
 
-            # Remove if layer no longer exists in the PSD
-            if img_layer not in valid_paths:
+            # Check if layer still exists
+            keep = False
+            if img_id > 0:
+                if img_id in valid_ids:
+                    keep = True
+            else:
+                # Fallback for legacy or ID-less layers
+                if img_layer in valid_paths:
+                    keep = True
+
+            if not keep:
                 images_to_remove.append(img)
-        
+
         count = len(images_to_remove)
         if count == 0:
             self.report({'INFO'}, "No orphaned layers found.")
@@ -396,21 +428,55 @@ class BPSD_OT_reload_all(bpy.types.Operator):
     def execute(self, context):
         props = context.scene.bpsd_props
         active_psd = props.active_psd_path
-        
+
         # 1. Identify which images need reloading
         images_to_reload = []
         requests = []
-        
+
         for img in bpy.data.images:
             if img.get("psd_path") != active_psd: continue
             if not img.get("bpsd_managed"): continue
-            
+
             # We use the existing image dimensions as the target
-            # (Assuming the PSD canvas size hasn't changed. 
+            # (Assuming the PSD canvas size hasn't changed.
             # If it has, user should probably re-connect first to update props)
             l_path = img.get("psd_layer_path")
             l_index = img.get("psd_layer_index")
+            l_id = img.get("psd_layer_id", 0)
             is_mask = img.get("psd_is_mask", False)
+
+            # --- REMAPPING LOGIC ---
+            # If we have an ID, we try to find where this layer went in the new structure
+            found_item = None
+            if l_id > 0:
+                for i, item in enumerate(props.layer_list):
+                    if item.layer_id == l_id:
+                        found_item = item
+                        new_index = i
+                        break
+
+            # If we found it by ID, and the path/index changed, update the image metadata
+            if found_item:
+                if found_item.path != l_path or new_index != l_index:
+                    print(f"BPSD: Remapping layer {l_path} -> {found_item.path}")
+
+                    # Update Metadata
+                    img["psd_layer_path"] = found_item.path
+                    img["psd_layer_index"] = new_index
+
+                    l_path = found_item.path
+                    l_index = new_index
+
+                    # Rename Image
+                    psd_name = os.path.basename(active_psd)
+                    new_name = f"{psd_name}/{l_index:03d}_{found_item.name}"
+                    if is_mask: new_name += "_MASK"
+
+                    if img.name != new_name:
+                        try:
+                            img.name = new_name
+                        except:
+                            pass # Name collision or something, not critical
 
             images_to_reload.append(img)
             requests.append({
@@ -418,13 +484,14 @@ class BPSD_OT_reload_all(bpy.types.Operator):
                 'layer_index': l_index,
                 'width': img.size[0],
                 'height': img.size[1],
-                'is_mask': is_mask
+                'is_mask': is_mask,
+                'layer_id': l_id
             })
-            
+
         if not requests:
             self.report({'INFO'}, "No layers to reload.")
             return {'CANCELLED'}
-            
+
         # 2. Batch Read
         self.report({'INFO'}, f"Reloading {len(requests)} layers...")
         results = psd_engine.read_all_layers(active_psd, requests)
@@ -441,6 +508,7 @@ class BPSD_OT_reload_all(bpy.types.Operator):
                 try:
                     img.pixels = results[key]
                     img.update()
+                    img.pack() # Ensure data is saved
                     success_count += 1
                 except Exception as e:
                     print(f"Failed to update image {img.name}: {e}")

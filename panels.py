@@ -122,6 +122,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 op = layer_sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False )
                 op.index = i
                 op.path = item.path
+                op.layer_id = item.layer_id
                 op.is_mask = False
 
             if item.has_mask:
@@ -132,6 +133,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 op = mask_sub.operator( "bpsd.select_layer", icon='MOD_MASK', emboss=False, text="" ) #  text="Mask"
                 op.index = i
                 op.path = item.path
+                op.layer_id = item.layer_id
                 op.is_mask = True
 
             if item.layer_type == "GROUP":

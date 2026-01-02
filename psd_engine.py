@@ -48,9 +48,10 @@ def read_file(path):
                 "is_clipping_mask": layer.clipping_mask,
                 "is_visible": layer.is_visible,
                 "hidden_by_parent": not parent_visible,
+                "layer_id" : layer.layer_id,
                 "children": []
             }
-
+            print(f"layer {layer_name} has id {layer.layer_id}")
             # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
 
             if is_group:
@@ -92,9 +93,40 @@ def get_layer_by_index_path(layered_file, index_path):
 
     return layer
 
+def get_layer(layered_file, layer_id=0, layer_path=""):
+    """
+    Finds a layer either by unique ID (preferred) or by index path (fallback).
+    Recursive search is used for ID lookup since PhotoshopAPI doesn't provide a direct map yet.
+    """
+    # 1. Try ID Match
+    if layer_id and layer_id > 0:
+        def search(layers):
+            for layer in layers:
+                # Check current layer
+                if hasattr(layer, 'layer_id') and layer.layer_id == layer_id:
+                    return layer
+
+                # Recurse if group
+                if hasattr(layer, 'layers'):
+                    found = search(layer.layers)
+                    if found: return found
+            return None
+
+        found_layer = search(layered_file.layers)
+        if found_layer:
+            return found_layer
+
+        print(f"BPSD: Layer ID {layer_id} not found. Falling back to path: {layer_path}")
+
+    # 2. Fallback to Path
+    if layer_path:
+        return get_layer_by_index_path(layered_file, layer_path)
+
+    return None
+
 # --- HELPER: Internal Read Logic (Refactored) ---
-def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mask):
-    layer = get_layer_by_index_path(layered_file, layer_path)
+def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mask, layer_id=0):
+    layer = get_layer(layered_file, layer_id, layer_path)
     if not layer: return None
 
     # --- MASK PATH ---
@@ -163,10 +195,10 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
 
 # --- EXISTING FUNCTIONS (Simplified wrappers) ---
 
-def read_layer(psd_path, layer_path, target_w, target_h, fetch_mask=False):
+def read_layer(psd_path, layer_path, target_w, target_h, fetch_mask=False, layer_id=0):
     try:
         layered_file = psapi.LayeredFile.read(psd_path)
-        flat_data = _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mask)
+        flat_data = _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mask, layer_id)
         if flat_data is None: return None, 0, 0
         return flat_data, target_w, target_h
     except Exception as e:
@@ -186,10 +218,11 @@ def read_all_layers(psd_path, requests):
             w = req['width']
             h = req['height']
             mask = req['is_mask']
+            layer_id = req.get('layer_id', 0)
 
             # if req['layer_type'] in ['SPECIAL','UNKNOWN']: continue
 
-            pixels = _read_layer_internal(layered_file, path, w, h, mask)
+            pixels = _read_layer_internal(layered_file, path, w, h, mask, layer_id)
 
             if pixels is not None:
                 # Key the result by layer_index AND mask type so we can map it back easily
@@ -247,8 +280,8 @@ def write_all_layers(psd_path, updates, canvas_w, canvas_h):
         layered_file = psapi.LayeredFile.read(psd_path)
         count = 0
         for data in updates:
-            if write_to_layered_file(layered_file, data['layer_path'], data['pixels'], 
-                                   canvas_w, canvas_h, data['is_mask']):
+            if write_to_layered_file(layered_file, data['layer_path'], data['pixels'],
+                                   canvas_w, canvas_h, data['is_mask'], data.get('layer_id', 0)):
                 count += 1
 
         if count > 0:
@@ -260,10 +293,10 @@ def write_all_layers(psd_path, updates, canvas_w, canvas_h):
         print(f"BPSD Batch Save Error: {e}")
         return False
 
-def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask):
-    layer = get_layer_by_index_path(layered_file, layer_path)
+def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask, layer_id=0):
+    layer = get_layer(layered_file, layer_id, layer_path)
     if not layer:
-        print(f"Can't save {layer_path} ?")
+        print(f"Can't save {layer_path} (ID: {layer_id}) ?")
         return False
 
     print(f"Saving {layer_path}, as mask : {is_mask}")
@@ -391,11 +424,11 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
 
         return True
 
-def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False):
+def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False, layer_id=0):
     layered_file = psapi.LayeredFile.read(psd_path)
-    write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask)
+    write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask, layer_id)
     print("writing...")
     layered_file.write(psd_path)
     print("done")
-    
+
     return True

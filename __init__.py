@@ -24,6 +24,7 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     path: bpy.props.StringProperty() # type: ignore
     layer_type: bpy.props.StringProperty() # type: ignore
     indent: bpy.props.IntProperty(default=0)# type: ignore
+    layer_id: bpy.props.IntProperty(default=0)# type: ignore
     has_mask: bpy.props.BoolProperty(default=False)# type: ignore
     is_clipping_mask: bpy.props.BoolProperty(default=False)# type: ignore
     is_visible: bpy.props.BoolProperty(default=False)# type: ignore
@@ -86,35 +87,14 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
         return items
 
     # --- HELPER: Update Handler ---
-    def on_psd_selection_update(self, context):
-        """
-        Triggered when the user picks a new PSD from the dropdown.
-        Automatically resolves the absolute path for the engine.
-        """
-        selected_name = self.active_psd_image
-        
-        if selected_name == 'NONE':
-            self.active_psd_path = ""
-            return
-
-        img = bpy.data.images.get(selected_name)
-        if img:
-            # Convert relative Blender path (//texture.psd) to Absolute System Path
-            abs_path = bpy.path.abspath(img.filepath)
-            
-            # Clean up path (remove trailing slashes, resolve symlinks)
-            abs_path = os.path.normpath(abs_path)
-            
-            self.active_psd_path = abs_path
-            
-            # Optional: Auto-Connect on switch? 
-            # Usually better to wait for user to click "Connect" to avoid lag.
+    # (Removed to decouple selection from active sync)
+    # def on_psd_selection_update(self, context): ...
     
     active_psd_image: bpy.props.EnumProperty(
         name="Source PSD",
         description="Select a .psd image currently loaded in Blender",
         items=get_psd_images,
-        update=on_psd_selection_update
+        # update=on_psd_selection_update  <-- REMOVED to make sync explicit
     )# type: ignore
     
     
@@ -152,8 +132,8 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
 
         props = context.scene.bpsd_props
 
-        # Resolve path from dropdown if not already set
-        if not props.active_psd_path and props.active_psd_image != 'NONE':
+        # ALWAYS resolve path from the current dropdown selection (Explicit Sync)
+        if props.active_psd_image != 'NONE':
             img = bpy.data.images.get(props.active_psd_image)
             if img:
                 abs_path = bpy.path.abspath(img.filepath)
@@ -215,6 +195,7 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             item.name = node['name']
             item.path = node['path']
             item.layer_type = node['layer_type']
+            item.layer_id = node.get('layer_id', 0)
             item.has_mask = node.get('has_mask', False)
             item.indent = indent
             item.is_clipping_mask = node['is_clipping_mask']
