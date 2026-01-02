@@ -2,6 +2,9 @@ About
 =========
 Blender add-on that allows you to seamlessly edit a PSD file's layers in Photoshop and Blender at the same time. Any changes you make in Blender will immediately sync with Photoshop upon hitting save, and similarly, hitting save in Photoshop will see your changes immediately reflected in Blender.
 
+<img width="311" height="513" alt="image" src="https://github.com/user-attachments/assets/5e46b5fb-ffae-49ed-b674-08b0ee48d7a0" />
+
+
 ## Photoshop Setup
 - in the add-on preferences, add the full path to your Photoshop exe (e.g. `C:\Program Files\Adobe\Adobe Photoshop 2023\Photoshop.exe`)
 - add "WarnRunningScripts 0" to PSUserConfig.txt to update the image in Photoshop silently
