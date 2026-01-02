@@ -277,24 +277,6 @@ class BPSD_OT_save_layer(bpy.types.Operator):
     layer_path: bpy.props.StringProperty()# type: ignore
     image_name: bpy.props.StringProperty()# type: ignore
     
-    @classmethod
-    def poll(cls, context):
-        # this doesnt' get called anyway?
-        # 1. Try to get the image from the context directly (most reliable in Image Editor)
-        img = getattr(context, "edit_image", None)
-
-        # 2. Fallback to checking the active space
-        if not img:
-            space = getattr(context, "space_data", None)
-            if space and getattr(space, "type", "") == 'IMAGE_EDITOR':
-                img = getattr(space, "image", None)
-
-        if not img:
-            return False
-
-        # Only intercept if it's a BPSD managed image
-        return img.get("bpsd_managed", False)
-
     def execute(self, context):
         # Try to find image to save
         img = None
