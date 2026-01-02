@@ -249,6 +249,7 @@ class BPSD_OT_save_layer(bpy.types.Operator):
         success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask)
 
         if success:
+            img.pack()
             self.report({'INFO'}, f"Saved {img.name}")
 
             # Also reload the main PSD image in Blender if it exists
@@ -317,6 +318,13 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
         #     props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
         
         if success:
+            # Pack all images that were successfully saved
+            for img in processed_images:
+                try:
+                    img.pack()
+                except:
+                    pass
+
             # Cleanup...
             if props.auto_refresh_ps:
                 if is_photoshop_file_unsaved(props.active_psd_path):

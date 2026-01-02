@@ -297,9 +297,21 @@ def auto_sync_check():
         # We check if the difference is significant (> 0.01 seconds)
         # This prevents loops caused by micro-jitter
         if abs(current_mtime - stored_mtime) > 0.01:
-            
+
+            # Check for dirty layers
+            has_unsaved = False
+            for img in bpy.data.images:
+                if img.get("bpsd_managed") and img.get("psd_path") == path and img.is_dirty:
+                    has_unsaved = True
+                    break
+
+            if has_unsaved:
+                print("BPSD: Photoshop file updated, but Auto-Sync skipped due to unsaved changes in Blender.")
+                props.last_known_mtime_str = str(current_mtime) # Acknowledge change to prevent looping
+                return 1.0
+
             print(f"BPSD: Change detected. Disk: {current_mtime} != Stored: {stored_mtime}")
-            
+
             # Update IMMEDIATELY to prevent double-triggering next tick
             props.last_known_mtime_str = str(current_mtime)
             
