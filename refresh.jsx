@@ -28,17 +28,23 @@ function refreshDocument(pathStr) {
 
     if (foundDoc) {
         // --- NEW SAFETY CHECK ---
+        // this is actually useless, photoshop will warn us? if we do not flag donotsavechanges
         if (foundDoc.saved === false) {
             // Option A: Silent abort (User sees nothing, reload just fails)
-            // return; 
-            
+            // return;
+
             // Option B: Loud failure (Recommended)
             alert("BPSD Sync Aborted:\n\n'" + foundDoc.name + "' has unsaved changes in Photoshop.\n\nPlease save or revert your changes in Photoshop before syncing from Blender.");
-            return; 
+            return;
         }
         // ------------------------
 
         foundDoc.close(SaveOptions.DONOTSAVECHANGES);
-        app.open(targetFile);
+        foundDoc = app.open(targetFile);
+
+        var dummyLayer = foundDoc.artLayers.add();
+        dummyLayer.remove();
+
+        foundDoc.save();
     }
 }

@@ -3,8 +3,8 @@ import bpy
 import os
 import numpy as np
 from . import psd_engine
-import tempfile
 import subprocess
+import time
 
 # --- HELPER ---
 def tag_image(image, psd_path, layer_path, layer_index, is_mask=False):
@@ -253,11 +253,11 @@ class BPSD_OT_save_layer(bpy.types.Operator):
 
             # Also reload the main PSD image in Blender if it exists
             # (Since we wrote to the file, the composite might have changed)
-            props = context.scene.bpsd_props
-            if props.active_psd_image != 'NONE':
-                main_img = bpy.data.images.get(props.active_psd_image)
-                if main_img:
-                    main_img.reload()
+            # props = context.scene.bpsd_props
+            # if props.active_psd_image != 'NONE':
+            #     main_img = bpy.data.images.get(props.active_psd_image)
+            #     if main_img:
+            #         main_img.reload()
 
             return {'FINISHED'}
         else:
@@ -312,8 +312,9 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
         self.report({'INFO'}, f"Batch saving {len(updates)} layers...")
         success = psd_engine.write_all_layers(active_psd, updates,props.psd_width, props.psd_height)
 
-        if os.path.exists(props.active_psd_path):
-            props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
+        # we have to let photoshop save so we can reload
+        # if os.path.exists(props.active_psd_path):
+        #     props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
         
         if success:
             # Cleanup...
@@ -328,10 +329,11 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
 
             # Also reload the main PSD image in Blender if it exists
             # (In case the save operation modified the PSD structure/composite)
-            if props.active_psd_image != 'NONE':
-                main_img = bpy.data.images.get(props.active_psd_image)
-                if main_img:
-                    main_img.reload()
+            # if props.active_psd_image != 'NONE':
+            #     main_img = bpy.data.images.get(props.active_psd_image)
+            #     if main_img:
+            #         # time.sleep(.2)
+            #         main_img.reload()
 
             return {'FINISHED'}
 

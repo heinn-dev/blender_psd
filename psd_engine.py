@@ -46,6 +46,7 @@ def read_file(path):
                 "layer_type": layer_type,
                 "has_mask": has_mask,
                 "is_clipping_mask": layer.clipping_mask,
+                "is_visible": layer.is_visible,
                 "children": []
             }
 
@@ -283,44 +284,28 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
 
     # --- COLOR PATH ---
     else:
-        planar_data = layer.get_image_data()
-        
-        # Case: Empty Layer -> Initialize to Canvas Size
-        if not planar_data:
-            new_data = {
-                0: pixels[:, :, 0], 1: pixels[:, :, 1], 2: pixels[:, :, 2], -1: pixels[:, :, 3]
-            }
+        # We always overwrite the layer with the full canvas data.
+        # This ensures that painting outside the original layer bounds works as expected.
+
+        new_data = {
+            0: pixels[:, :, 0],
+            1: pixels[:, :, 1],
+            2: pixels[:, :, 2],
+            -1: pixels[:, :, 3]
+        }
+
+        # Check if the layer originally had data to preserve any non-standard behavior?
+        # Actually, for a sync workflow, we want Blender to be the source of truth for the pixels.
+
+        try:
             layer.set_image_data(new_data, width=canvas_w, height=canvas_h)
             layer.center_x = canvas_w / 2
             layer.center_y = canvas_h / 2
-            return True
+        except Exception as e:
+            print(f"BPSD Write Color Error: {e}")
+            return False
 
-        # Case: Existing Layer -> Stamp (Preserve Bounds)
-        l_w = layer.width
-        l_h = layer.height
-        layer_left = int(layer.center_x - (l_w / 2))
-        layer_top = int(layer.center_y - (l_h / 2))
-        
-        def do_stamp(channel_idx, blender_slice):
-            if channel_idx in planar_data:
-                target_arr = planar_data[channel_idx]
-                stamp_from_canvas(target_arr, blender_slice, layer_left, layer_top)
-                planar_data[channel_idx] = target_arr
-
-        do_stamp(0, pixels[:, :, 0]) # R
-        do_stamp(1, pixels[:, :, 1]) # G
-        do_stamp(2, pixels[:, :, 2]) # B
-        do_stamp(-1, pixels[:, :, 3]) # A
-        
-        # Cleanup Mask channels from this dict to prevent dimension mismatch crashes
-        keys_to_remove = [k for k in planar_data.keys() if k < -1]
-        for k in keys_to_remove:
-            del planar_data[k]
-
-        # Write Back (Implicitly preserves width/height of the RGB channels)
-        layer.set_image_data(planar_data) 
-        
-    return True
+        return True
 
 def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False):
     layered_file = psapi.LayeredFile.read(psd_path)

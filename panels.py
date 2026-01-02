@@ -79,9 +79,12 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 current_layout = box.column(align=True)
             else:
                 current_layout = parent_layout
-
-            row = current_layout.row(align=True)
-
+            
+            split = current_layout.split(factor=0.75)
+            row = split.row(align=True)
+            vis_row = split.row(align=True)
+            vis_row.alignment = 'RIGHT'
+            
 
             is_active_row = (i == props.active_layer_index)
             ind = current_indent
@@ -97,7 +100,8 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 icon = 'FILE'
             else:
                 icon = 'IMAGE_DATA'
-                
+            
+            eye = "LAYER_ACTIVE" if item.is_visible else "LAYER_USED"
                 
             row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
             row.alignment = 'LEFT'
@@ -130,6 +134,10 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             if item.layer_type == "GROUP":
                 layout_stack.append(current_layout)
                 current_indent += 1
+            
+            vis_row.label(text="", icon=eye)
+                
+            
     
         psd_name = props.active_psd_path.replace("\\", "/")
         psd_name = psd_name.split("/")[-1]
