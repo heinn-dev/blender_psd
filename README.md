@@ -7,7 +7,7 @@ Blender add-on that allows you to seamlessly edit a PSD file's layers in Photosh
 
 ## Photoshop Setup
 - in the add-on preferences, add the full path to your Photoshop exe (e.g. `C:\Program Files\Adobe\Adobe Photoshop 2023\Photoshop.exe`)
-- add "WarnRunningScripts 0" to PSUserConfig.txt to update the image in Photoshop silently
+- add `WarnRunningScripts 0` to PSUserConfig.txt to update the image in Photoshop silently
 
 ## Quickstart
 - open the image editor, drag in a `.psd`
