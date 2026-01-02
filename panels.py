@@ -155,6 +155,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         
         row = layout.row(align=True)
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
+        row.prop(props, "auto_save_on_image_save", text="", icon='CHECKMARK' if props.auto_save_on_image_save else 'CANCEL', toggle=True)
         
         
 

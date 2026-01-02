@@ -36,7 +36,8 @@ def image_dirty_watcher():
 
         # Transition: Dirty -> Clean (User Saved)
         if was_dirty and not current_dirty:
-            images_to_save.append(img.name)
+            if props.auto_save_on_image_save:
+                images_to_save.append(img.name)
 
     if images_to_save:
         def trigger_saves():
