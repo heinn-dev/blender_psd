@@ -62,13 +62,6 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
         default=True
     ) # type: ignore
 
-    is_internal_operation: bpy.props.BoolProperty(
-        name="Is Internal Operation",
-        description="Flag to prevent recursive triggers when the addon saves images",
-        default=False,
-        options={'SKIP_SAVE'}
-    ) # type: ignore
-
     #last_known_mtime: bpy.props.FloatProperty(default=0.0) # type: ignore
     last_known_mtime_str: bpy.props.StringProperty(default="0.0") # type: ignore
 
