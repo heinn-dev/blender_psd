@@ -65,7 +65,7 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
     auto_save_on_image_save: bpy.props.BoolProperty(
         name="Auto-Save on Alt-S",
         description="Automatically sync to PSD when saving an image in Blender (Alt-S)",
-        default=True
+        default=False
     ) # type: ignore
 
     #last_known_mtime: bpy.props.FloatProperty(default=0.0) # type: ignore

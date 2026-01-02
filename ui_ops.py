@@ -21,7 +21,7 @@ def image_dirty_watcher():
     """
     context = bpy.context
     if not hasattr(context, "scene") or not context.scene:
-        return 0.5
+        return 1
 
     props = context.scene.bpsd_props
 
@@ -50,7 +50,7 @@ def image_dirty_watcher():
             return None
         bpy.app.timers.register(trigger_saves, first_interval=0.01)
 
-    return 0.5
+    return 1
 
 # --- HELPER ---
 def tag_image(image, psd_path, layer_path, layer_index, is_mask=False, layer_id=0):
