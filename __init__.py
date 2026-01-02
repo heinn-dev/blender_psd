@@ -27,6 +27,7 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     has_mask: bpy.props.BoolProperty(default=False)# type: ignore
     is_clipping_mask: bpy.props.BoolProperty(default=False)# type: ignore
     is_visible: bpy.props.BoolProperty(default=False)# type: ignore
+    hidden_by_parent: bpy.props.BoolProperty(default=False)# type: ignore
 
 
 class BPSD_SceneProperties(bpy.types.PropertyGroup):
@@ -218,6 +219,7 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             item.indent = indent
             item.is_clipping_mask = node['is_clipping_mask']
             item.is_visible = node['is_visible']
+            item.hidden_by_parent = node.get('hidden_by_parent', False)
 
             if node['children']:
                 self.flatten_tree(node['children'], collection, indent + 1)

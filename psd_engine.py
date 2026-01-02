@@ -9,7 +9,7 @@ def read_file(path):
     try:
         layered_file = psapi.LayeredFile.read(path)
 
-        def parse_layer_structure(layer, current_index_path="", child_index=0):
+        def parse_layer_structure(layer, current_index_path="", child_index=0, parent_visible=True):
             layer_name = layer.name
             # Use index-based path for unique identification
             index_path = f"{current_index_path}/{child_index}" if current_index_path else str(child_index)
@@ -47,21 +47,26 @@ def read_file(path):
                 "has_mask": has_mask,
                 "is_clipping_mask": layer.clipping_mask,
                 "is_visible": layer.is_visible,
+                "hidden_by_parent": not parent_visible,
                 "children": []
             }
 
             # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
 
             if is_group:
+                # Calculate visibility for children
+                # A child is visible only if its parent is effectively visible AND the parent (current layer) is visible
+                is_effectively_visible = parent_visible and layer.is_visible
+
                 for i, child in enumerate(layer.layers):
-                    node["children"].append(parse_layer_structure(child, index_path, i))
+                    node["children"].append(parse_layer_structure(child, index_path, i, is_effectively_visible))
 
             return node
 
         structure = []
 
         for i, layer in enumerate(layered_file.layers):
-            structure.append(parse_layer_structure(layer, "", i))
+            structure.append(parse_layer_structure(layer, "", i, True))
 
         return structure, layered_file.width, layered_file.height
 
@@ -141,7 +146,14 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
         if -1 in planar_data:
             paste_to_canvas(c_a, planar_data[-1], target_w, target_h, layer_left, layer_top)
         else:
-            opaque_block = np.full((l_h, l_w), 0, dtype=dtype) #transparent by default
+            # If no alpha channel exists, the layer is opaque where it has data.
+            # We fill the alpha channel with the max value for the dtype (255 for uint8, 1.0 for float).
+
+            fill_val = 1.0
+            if np.issubdtype(dtype, np.integer):
+                fill_val = np.iinfo(dtype).max
+
+            opaque_block = np.full((l_h, l_w), fill_val, dtype=dtype)
             paste_to_canvas(c_a, opaque_block, target_w, target_h, layer_left, layer_top)
 
         img_stack = np.stack([c_r, c_g, c_b, c_a], axis=-1)
@@ -284,25 +296,97 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
 
     # --- COLOR PATH ---
     else:
-        # We always overwrite the layer with the full canvas data.
-        # This ensures that painting outside the original layer bounds works as expected.
+        planar_data = layer.get_image_data()
 
-        new_data = {
+        # 1. Prepare Blender Data (Canvas Space)
+        b_data = {
             0: pixels[:, :, 0],
             1: pixels[:, :, 1],
             2: pixels[:, :, 2],
             -1: pixels[:, :, 3]
         }
 
-        # Check if the layer originally had data to preserve any non-standard behavior?
-        # Actually, for a sync workflow, we want Blender to be the source of truth for the pixels.
-
-        try:
-            layer.set_image_data(new_data, width=canvas_w, height=canvas_h)
+        # Case: Empty Layer -> Initialize to Canvas Size
+        if not planar_data:
+            layer.set_image_data(b_data, width=canvas_w, height=canvas_h)
             layer.center_x = canvas_w / 2
             layer.center_y = canvas_h / 2
+            return True
+
+        # Case: Existing Layer -> Union of Bounds
+        # We want to preserve pixels that are outside the Blender Canvas,
+        # but overwrite pixels that are INSIDE the Blender Canvas.
+
+        # Current Layer Bounds
+        l_w = layer.width
+        l_h = layer.height
+        l_x = int(layer.center_x - (l_w / 2))
+        l_y = int(layer.center_y - (l_h / 2))
+
+        # Blender Canvas Bounds (Always at 0,0)
+        c_x = 0
+        c_y = 0
+        c_w = canvas_w
+        c_h = canvas_h
+
+        # Union Bounds
+        u_x = min(l_x, c_x)
+        u_y = min(l_y, c_y)
+        u_r = max(l_x + l_w, c_x + c_w)
+        u_b = max(l_y + l_h, c_y + c_h)
+
+        u_w = int(u_r - u_x)
+        u_h = int(u_b - u_y)
+
+        # Offsets (Where to paste relative to new Union Top-Left)
+        offset_l_x = int(l_x - u_x)
+        offset_l_y = int(l_y - u_y)
+
+        offset_c_x = int(c_x - u_x)
+        offset_c_y = int(c_y - u_y)
+
+        new_planar_data = {}
+
+        # Collect all channels (excluding masks < -1)
+        all_channels = set(planar_data.keys()) | set(b_data.keys())
+        valid_channels = {k for k in all_channels if k >= -1}
+
+        # Determine appropriate dtype (usually uint8 or uint16/float32)
+        # We take the first available channel from the original file to guess
+        dtype = np.uint8
+        if planar_data:
+            dtype = next(iter(planar_data.values())).dtype
+
+        for ch in valid_channels:
+            # Create full union buffer
+            union_arr = np.zeros((u_h, u_w), dtype=dtype)
+
+            # 1. Paste Old Data (Background)
+            if ch in planar_data:
+                old_arr = planar_data[ch]
+                # Ensure dimensions match what we expect
+                h, w = old_arr.shape
+                # Safety clip
+                if h <= u_h and w <= u_w:
+                    union_arr[offset_l_y:offset_l_y+h, offset_l_x:offset_l_x+w] = old_arr
+
+            # 2. Paste New Canvas Data (Foreground / Overwrite)
+            if ch in b_data:
+                new_arr = b_data[ch]
+                if new_arr.dtype != dtype:
+                    new_arr = new_arr.astype(dtype)
+
+                union_arr[offset_c_y:offset_c_y+c_h, offset_c_x:offset_c_x+c_w] = new_arr
+
+            new_planar_data[ch] = union_arr
+
+        # Write Back
+        try:
+            layer.set_image_data(new_planar_data, width=u_w, height=u_h)
+            layer.center_x = u_x + (u_w / 2)
+            layer.center_y = u_y + (u_h / 2)
         except Exception as e:
-            print(f"BPSD Write Color Error: {e}")
+            print(f"BPSD Write Union Error: {e}")
             return False
 
         return True

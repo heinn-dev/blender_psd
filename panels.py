@@ -101,7 +101,10 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             else:
                 icon = 'IMAGE_DATA'
             
-            eye = "LAYER_ACTIVE" if item.is_visible else "LAYER_USED"
+            if item.hidden_by_parent:
+                eye = "KEYFRAME"
+            else:
+                eye = "LAYER_ACTIVE" if item.is_visible else "LAYER_USED"
                 
             row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
             row.alignment = 'LEFT'
