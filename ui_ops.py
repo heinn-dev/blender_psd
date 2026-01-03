@@ -449,17 +449,14 @@ class BPSD_OT_clean_orphans(bpy.types.Operator):
             img_layer = img.get("psd_layer_path")
             img_id = img.get("psd_layer_id", 0)
 
-            # Only clean images from the current active PSD
             if img_psd != active_psd:
                 continue
 
-            # Check if layer still exists
             keep = False
             if img_id > 0:
                 if img_id in valid_ids:
                     keep = True
             else:
-                # Fallback for legacy or ID-less layers
                 if img_layer in valid_paths:
                     keep = True
 
@@ -486,7 +483,6 @@ class BPSD_OT_reload_all(bpy.types.Operator):
         props = context.scene.bpsd_props
         active_psd = props.active_psd_path
 
-        # 1. Identify which images need reloading
         images_to_reload = []
         requests = []
 
@@ -494,16 +490,11 @@ class BPSD_OT_reload_all(bpy.types.Operator):
             if img.get("psd_path") != active_psd: continue
             if not img.get("bpsd_managed"): continue
 
-            # We use the existing image dimensions as the target
-            # (Assuming the PSD canvas size hasn't changed.
-            # If it has, user should probably re-connect first to update props)
             l_path = img.get("psd_layer_path")
             l_index = img.get("psd_layer_index")
             l_id = img.get("psd_layer_id", 0)
             is_mask = img.get("psd_is_mask", False)
 
-            # --- REMAPPING LOGIC ---
-            # If we have an ID, we try to find where this layer went in the new structure
             found_item = None
             if l_id > 0:
                 for i, item in enumerate(props.layer_list):
@@ -512,19 +503,16 @@ class BPSD_OT_reload_all(bpy.types.Operator):
                         new_index = i
                         break
 
-            # If we found it by ID, and the path/index changed, update the image metadata
             if found_item:
                 if found_item.path != l_path or new_index != l_index:
                     print(f"BPSD: Remapping layer {l_path} -> {found_item.path}")
 
-                    # Update Metadata
                     img["psd_layer_path"] = found_item.path
                     img["psd_layer_index"] = new_index
 
                     l_path = found_item.path
                     l_index = new_index
 
-                    # Rename Image
                     psd_name = os.path.basename(active_psd)
                     new_name = f"{psd_name}/{l_index:03d}_{found_item.name}"
                     if is_mask: new_name += "_MASK"
@@ -556,7 +544,6 @@ class BPSD_OT_reload_all(bpy.types.Operator):
         if os.path.exists(props.active_psd_path):
             props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
 
-        # 3. Update Blender Images
         success_count = 0
         for img in images_to_reload:
             key = (img.get("psd_layer_index"), img.get("psd_is_mask", False))
@@ -570,7 +557,6 @@ class BPSD_OT_reload_all(bpy.types.Operator):
                 except Exception as e:
                     print(f"Failed to update image {img.name}: {e}")
 
-        # 4. Reload the main PSD file if it's loaded in Blender
         if props.active_psd_image != 'NONE':
             main_img = bpy.data.images.get(props.active_psd_image)
             if main_img:
