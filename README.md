@@ -1,6 +1,6 @@
 About
 =========
-Blender add-on that allows you to seamlessly edit a PSD file's layers in Photoshop and Blender at the same time. Any changes you make in Blender will immediately sync with Photoshop upon hitting save, and similarly, hitting save in Photoshop will see your changes immediately reflected in Blender.
+Blender add-on (⚠️ very WIP and experimental, back up your files! ⚠️) that allows you to seamlessly edit a PSD file's layers in Photoshop and Blender at the same time. Any changes you make in Blender will immediately sync with Photoshop upon hitting save, and similarly, hitting save in Photoshop will see your changes immediately reflected in Blender.
 
 <img width="311" height="513" alt="image" src="https://github.com/user-attachments/assets/5e46b5fb-ffae-49ed-b674-08b0ee48d7a0" />
 
@@ -14,10 +14,10 @@ Blender add-on that allows you to seamlessly edit a PSD file's layers in Photosh
 - on the sidebar / n-menu, select `BPSD`
 - pick the image on the dropdown, and press `Sync file`
 
-Pressing `Save` will update your changes in the .psd and Photoshop, if it is open. Note that pressing `Alt-S` to save the layer doesn't work yet, and it will make your change invisible to the save system. Only layers marked as dirty (`Image*`) will be saved in the psd.
+Pressing `Save` will update your changes in the .psd and Photoshop, if it is open. Only layers marked as dirty (`Image*`) will be saved in the psd. Note that pressing `Alt-S` to save the layer doesnt save the psd by default (you can enable this by clicking the toggle next to the save button, but it is quite slow). 
 The psd preview will look black if Photoshop isn't running, as it is necessary to update the composite image.
 
-!!! Warning !!!
+⚠️ Warning ⚠️
 =========
 **Text Layers** can't be loaded or saved yet!
 
