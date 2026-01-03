@@ -38,7 +38,7 @@ def image_dirty_watcher():
     if images_to_save:
         def trigger_saves():
             for name in images_to_save:
-                print(f"BPSD: Detected save on {name}, syncing to PSD...")
+                # print(f"BPSD: Detected save on {name}, syncing to PSD...")
                 try:
                     bpy.ops.bpsd.save_layer('EXEC_DEFAULT', image_name=name)
                 except Exception as e:
@@ -85,9 +85,9 @@ def focus_image_editor(context, image):
         
 
 def run_photoshop_refresh(target_psd_path):
-    current_dir = os.path.dirname(__file__)
+    current_dir = os.path.join(os.path.dirname(__file__), "interop")
     data_path = os.path.join(current_dir, "bpsd_target.txt")
-    
+
     try:
         with open(data_path, "w", encoding="utf-8") as f:
             f.write(target_psd_path)
@@ -99,60 +99,54 @@ def run_photoshop_refresh(target_psd_path):
     if sys.platform == 'win32':
         runner = os.path.join(current_dir, "silent_runner.vbs")
         jsx_script = os.path.join(current_dir, "refresh.jsx")
-        
+
         if os.path.exists(runner):
             subprocess.Popen(["wscript", runner, jsx_script])
-            
+
     elif sys.platform == 'darwin':
         # --- MACOS (AppleScript / osascript) ---
-        # Note: Mac doesn't need the intermediate runner file as much, 
+        # Note: Mac doesn't need the intermediate runner file as much,
         # but to keep parity we can use 'osascript' to run a line of code.
-        
+
         jsx_script = os.path.join(current_dir, "refresh.jsx")
-        
+
         # AppleScript command to run the JSX file without activating the app
         cmd = f'tell application id "com.adobe.Photoshop" to do javascript file "{jsx_script}"'
         subprocess.Popen(["osascript", "-e", cmd])
-        
+
     else:
         print("Linux is not supported for Photoshop interop.")
 
 def is_photoshop_file_unsaved(target_psd_path):
-    current_dir = os.path.dirname(__file__)
-    
+    current_dir = os.path.join(os.path.dirname(__file__), "interop")
+
     try:
         if sys.platform == 'win32':
             vbs_checker = os.path.join(current_dir, "check_status.vbs")
             if not os.path.exists(vbs_checker): return None
-            
+
             # Run VBS and capture output
             # cscript.exe runs in console mode (allowing stdout capture)
             result = subprocess.check_output(
-                ["cscript", "//Nologo", vbs_checker, target_psd_path], 
+                ["cscript", "//Nologo", vbs_checker, target_psd_path],
                 encoding='utf-8'
             )
             return "TRUE" in result.strip()
 
         elif sys.platform == 'darwin':
-            # AppleScript One-Liner
-            # "modified" property returns boolean
-            cmd = f'''
-            tell application id "com.adobe.Photoshop"
-                set targetPath to "{target_psd_path}"
-                repeat with d in documents
-                    if (posix path of (file path of d as alias)) is targetPath then
-                        return modified of d
-                    end if
-                end repeat
-            end tell
-            '''
-            result = subprocess.check_output(["osascript", "-e", cmd], encoding='utf-8')
+            scpt_checker = os.path.join(current_dir, "check_status.scpt")
+            if not os.path.exists(scpt_checker): return None
+
+            result = subprocess.check_output(
+                ["osascript", scpt_checker, target_psd_path],
+                encoding='utf-8'
+            )
             return "true" in result.lower()
 
     except Exception:
         # If Photoshop isn't running or script fails, assume safe to proceed
         return False
-        
+
     return False
 
 
