@@ -12,15 +12,11 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         layout = self.layout
         props = context.scene.bpsd_props
 
-        # 1. Connection Header
         sync_col = layout.column(align=True)
 
-        # dropdown
         sync_col.prop(props, "active_psd_image", text="")
-        # Check validity from dropdown selection directly (not just active_psd_path)
         is_valid = props.active_psd_image != "NONE" and props.active_psd_image in bpy.data.images
 
-        # Check if dropdown selection matches currently synced file
         is_already_synced = False
         if is_valid and props.active_psd_path and len(props.layer_list) > 0:
             img = bpy.data.images.get(props.active_psd_image)
@@ -29,7 +25,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 synced_path = os.path.normpath(props.active_psd_path)
                 is_already_synced = (selected_path == synced_path)
 
-        # connect button (add disconnect too?)
         row = sync_col.row(align=True)
         button_text = "Reload from disk" if is_already_synced else "Sync file"
         row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text=button_text)
@@ -39,7 +34,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
         row.enabled = is_valid
 
-        # Show currently synced file
         if props.active_psd_path and len(props.layer_list) > 0:
             sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
         
@@ -56,10 +50,8 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         layout.label(text="Layers", icon ="RENDERLAYERS")
 
         root_box = layout.box()
-        # Create an aligned column inside it (just like you do for groups)
         root_col = root_box.column(align=True) 
 
-        # Start the stack with the aligned column
         layout_stack = [root_col]
         current_indent = 0
 

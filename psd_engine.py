@@ -54,9 +54,8 @@ def read_file(path):
             # print(f"layer {layer_name} has id {layer.layer_id}")
             # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
 
+            # if you wanna have a visibility system that's pararrel to PS, probably just move this stuff out from here...
             if is_group:
-                # Calculate visibility for children
-                # A child is visible only if its parent is effectively visible AND the parent (current layer) is visible
                 is_effectively_visible = parent_visible and layer.is_visible
 
                 for i, child in enumerate(layer.layers):
@@ -280,8 +279,12 @@ def write_all_layers(psd_path, updates, canvas_w, canvas_h):
         layered_file = psapi.LayeredFile.read(psd_path)
         count = 0
         for data in updates:
+            # Use per-update dimensions to ensure correct reshaping of pixel data
+            w = data.get('width', canvas_w)
+            h = data.get('height', canvas_h)
+
             if write_to_layered_file(layered_file, data['layer_path'], data['pixels'],
-                                   canvas_w, canvas_h, data['is_mask'], data.get('layer_id', 0)):
+                                   w, h, data['is_mask'], data.get('layer_id', 0)):
                 count += 1
 
         if count > 0:
@@ -425,8 +428,15 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
         return True
 
 def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False, layer_id=0):
-    layered_file = psapi.LayeredFile.read(psd_path)
-    write_to_layered_file(layered_file, layer_path, blender_pixels, width, height, is_mask, layer_id)
-    layered_file.write(psd_path)
-
-    return True
+    """
+    Wrapper around write_all_layers for a single layer.
+    """
+    update = {
+        'layer_path': layer_path,
+        'pixels': blender_pixels,
+        'width': width,
+        'height': height,
+        'is_mask': is_mask,
+        'layer_id': layer_id
+    }
+    return write_all_layers(psd_path, [update], width, height)

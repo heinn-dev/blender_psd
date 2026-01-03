@@ -251,6 +251,80 @@ class BPSD_OT_load_layer(bpy.types.Operator):
         return {'FINISHED'}
 
 
+# --- SAVE HELPER ---
+def perform_save_images(context, psd_path, images):
+    """
+    Shared logic to save a list of Blender images back to a PSD file.
+    Returns (status_set, message_string).
+    """
+    props = context.scene.bpsd_props
+
+    updates = []
+    valid_images = []
+
+    for img in images:
+        # Basic validation
+        layer_path = img.get("psd_layer_path")
+        is_mask = img.get("psd_is_mask", False)
+        layer_id = img.get("psd_layer_id", 0)
+
+        # If passed via save_layer (single), we might have loose requirements,
+        # but generally we need a layer path.
+        if not layer_path:
+            continue
+
+        updates.append({
+            'layer_path': layer_path,
+            'pixels': np.array(img.pixels),
+            'width': img.size[0],
+            'height': img.size[1],
+            'is_mask': is_mask,
+            'layer_id': layer_id
+        })
+        valid_images.append(img)
+
+    if not updates:
+        return {'CANCELLED'}, "No valid images to save."
+
+    # Determine Canvas Size from the first valid image
+    # This ensures that even if props are out of sync, we match the actual image data we are sending.
+    # This preserves the behavior of the original save_layer which used img.size.
+    canvas_w = updates[0]['width']
+    canvas_h = updates[0]['height']
+
+    # Perform the write
+    # We use the inferred canvas size from the images to prevent reshape errors.
+    success = psd_engine.write_all_layers(psd_path, updates, canvas_w, canvas_h)
+
+    if success:
+        # Pack and update cache
+        for img in valid_images:
+            try:
+                img.pack()
+                DIRTY_STATE_CACHE[img.name] = False
+            except Exception as e:
+                print(f"Error packing {img.name}: {e}")
+
+        # Photoshop Refresh
+        msg = "Saved to disk."
+        status = {'FINISHED'}
+
+        if props.auto_refresh_ps:
+            # check if we are saving to the active PSD to run the refresh
+            # (If saving an image from another PSD, we might not want to refresh the active one?
+            #  But usually we only work on one.)
+            if is_photoshop_file_unsaved(psd_path):
+                msg = "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS)."
+                status = {'WARNING'} # Or just INFO with warning msg
+            else:
+                run_photoshop_refresh(psd_path)
+                msg = "Saved & Refreshed Photoshop."
+
+        return status, msg
+
+    return {'CANCELLED'}, "Write failed."
+
+
 # --- SAVE OPERATOR ---
 class BPSD_OT_save_layer(bpy.types.Operator):
     bl_idname = "bpsd.save_layer"
@@ -261,7 +335,7 @@ class BPSD_OT_save_layer(bpy.types.Operator):
     # Optional overrides
     layer_path: bpy.props.StringProperty()# type: ignore
     image_name: bpy.props.StringProperty()# type: ignore
-    
+
     def execute(self, context):
         # Try to find image to save
         img = None
@@ -280,41 +354,26 @@ class BPSD_OT_save_layer(bpy.types.Operator):
 
         # Get Metadata
         psd_path = img.get("psd_path", context.scene.bpsd_props.active_psd_path)
-        target_layer = img.get("psd_layer_path", self.layer_path)
-        is_mask = img.get("psd_is_mask", False)
-        layer_id = img.get("psd_layer_id", 0)
 
-        if not target_layer:
+        # Handle manual override case
+        if not img.get("psd_layer_path") and self.layer_path:
+            img["psd_layer_path"] = self.layer_path
+
+        if not img.get("psd_layer_path"):
             self.report({'ERROR'}, "Image is not linked to a PSD layer.")
             return {'CANCELLED'}
 
-        # Write
-        pixels = np.array(img.pixels)
-        w, h = img.size # psd size?
+        status, msg = perform_save_images(context, psd_path, [img])
 
-        # we shouldn't write to GROUP or SMART, unless we're writing the mask...
-        success = psd_engine.write_layer(psd_path, target_layer, pixels, w, h, is_mask=is_mask, layer_id=layer_id)
-
-        if success:
-            img.pack()
-            # Update cache immediately to prevent loop
-            DIRTY_STATE_CACHE[img.name] = False
-
-            self.report({'INFO'}, f"Saved {img.name}")
-            props = context.scene.bpsd_props
-
-            if props.auto_refresh_ps:
-                if is_photoshop_file_unsaved(props.active_psd_path):
-                    self.report({'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS).")
-                else:
-                    run_photoshop_refresh(props.active_psd_path)
-                    self.report({'INFO'}, "Saved & Refreshed Photoshop.")
-            else:
-                self.report({'INFO'}, "Saved to disk.")
+        if 'CANCELLED' in status:
+            self.report({'ERROR'}, msg)
+            return {'CANCELLED'}
+        elif 'WARNING' in status:
+            self.report({'WARNING'}, msg)
             return {'FINISHED'}
         else:
-            self.report({'ERROR'}, "Write failed.")
-            return {'CANCELLED'}
+            self.report({'INFO'}, msg)
+            return {'FINISHED'}
 
 # --- SAVE ALL OPERATOR ---
 class BPSD_OT_save_all_layers(bpy.types.Operator):
@@ -324,13 +383,10 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
 
     def execute(self, context):
         props = context.scene.bpsd_props
-
         active_psd = props.active_psd_path
 
-        updates = []
-        processed_images = [] # Keep track to clear dirty flags later
+        images_to_save = []
 
-        # we shouldn't write to GROUP or SMART, unless we're writing the mask...
         for img in bpy.data.images:
             if img.get("psd_path") != active_psd:
                 continue
@@ -338,67 +394,30 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
             if not img.get("bpsd_managed"):
                 continue
 
-            # since we do not write to disk on alt-s, we can't do this for now...
-            # I mean we can, just not really clear, hmm..
             if not img.is_dirty:
                 continue
 
-            layer_path = img.get("psd_layer_path")
-            is_mask = img.get("psd_is_mask", False)
-            layer_id = img.get("psd_layer_id", 0)
+            if not img.get("psd_layer_path"):
+                continue
 
-            if not layer_path: continue
+            images_to_save.append(img)
 
-            updates.append({
-                'layer_path': layer_path,
-                'pixels': np.array(img.pixels), # Accessing pixels is heavy, do it here
-                'width': img.size[0],
-                'height': img.size[1],
-                'is_mask': is_mask,
-                'layer_id': layer_id
-            })
-
-            processed_images.append(img)
-
-        if not updates:
+        if not images_to_save:
             self.report({'INFO'}, "No unsaved changes found.")
             return {'CANCELLED'}
 
-        self.report({'INFO'}, f"Batch saving {len(updates)} layers...")
-        success = psd_engine.write_all_layers(active_psd, updates,props.psd_width, props.psd_height)
+        self.report({'INFO'}, f"Batch saving {len(images_to_save)} layers...")
 
-        # we have to let photoshop save so we can reload
-        # if os.path.exists(props.active_psd_path):
-        #     props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
+        status, msg = perform_save_images(context, active_psd, images_to_save)
 
-        if success:
-            # Pack all images that were successfully saved
-            for img in processed_images:
-                try:
-                    img.pack()
-                    # Update cache immediately to prevent loop
-                    DIRTY_STATE_CACHE[img.name] = False
-                except:
-                    pass
-
-            # Cleanup...
-            if props.auto_refresh_ps:
-                if is_photoshop_file_unsaved(props.active_psd_path):
-                    self.report({'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS).")
-                else:
-                    run_photoshop_refresh(props.active_psd_path)
-                    self.report({'INFO'}, "Saved & Refreshed Photoshop.")
-            else:
-                self.report({'INFO'}, "Saved to disk.")
-
-            # Also reload the main PSD image in Blender if it exists
-            # (In case the save operation modified the PSD structure/composite)
-            # if props.active_psd_image != 'NONE':
-            #     main_img = bpy.data.images.get(props.active_psd_image)
-            #     if main_img:
-            #         # time.sleep(.2)
-            #         main_img.reload()
-
+        if 'CANCELLED' in status:
+            self.report({'ERROR'}, msg)
+            return {'CANCELLED'}
+        elif 'WARNING' in status:
+            self.report({'WARNING'}, msg)
+            return {'FINISHED'}
+        else:
+            self.report({'INFO'}, msg)
             return {'FINISHED'}
 
 # --- PURGE OPERATOR ---

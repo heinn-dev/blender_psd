@@ -23,10 +23,10 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
 
         return True
         
+        #  this is just fucked
         for window in bpy.context.window_manager.windows:
             for area in window.screen.areas:
                 if area.type == 'VIEW3D':
-                    # Check if the current object in this viewport is in Paint Mode
                     # if bpy.context.view_layer.objects.active:
                     #     if bpy.context.object.mode == 'PAINT_TEXTURE':
                     #         return True
@@ -34,7 +34,6 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
                 
                 # we need another panel in here too hmmmmmm
                 
-                # # Check the Image Editor (Texture Paint tab)
                 # if area.type == 'IMAGE_EDITOR':
                 #     for space in area.spaces:
                 #         if space.type == 'IMAGE_EDITOR':
@@ -92,14 +91,8 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
 
         tool_settings = context.tool_settings.image_paint
         space = context.space_data
-        brush = context.tool_settings.image_paint.brush
 
-        # Get Preferences for Frequent Brushes
-        # In Blender 4.2 Extensions, __package__ is the full ID (e.g. "bl_ext.user_default.blender_psd")
-        # In Legacy, it is just "blender_psd"
-        package_name = __package__
-        prefs = context.preferences.addons[package_name].preferences
-        frequent_list = [x.strip() for x in prefs.frequent_brushes.split(',')]
+
 
         # ===== FALLOFF SELECT
 
@@ -125,16 +118,21 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         
         # ===== BLEND MODE HEADER (TOGGLES)
         # Create a header row for the toggles
+        
+        package_name = __package__
+        prefs = context.preferences.addons[package_name].preferences
+        frequent_list = [x.strip() for x in prefs.frequent_brushes.split(',')]
+        
         row = layout.row(align=True)
         row.label(text="Blend Mode")
         row.prop(props, "show_frequent_only", toggle=True)
 
-        # Toggle current brush in frequent list
+        brush = context.tool_settings.image_paint.brush
         if brush and brush.blend in self.blend_map:
              is_frequent = brush.blend in frequent_list
              row.operator("bpsd.toggle_frequent", text="", icon='SOLO_ON', depress=is_frequent)
 
-        # Create a second row for category toggles if you want them compact
+        # too much clutter, not really useful...
         # row = layout.row(align=True)
         # row.scale_x = 0.8 # Make toggles smaller to fit
         # row.prop(props, "show_cat_math", toggle=True)
@@ -144,8 +142,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         # row.prop(props, "show_cat_burn", toggle=True)
         # row.prop(props, "show_cat_alpha", toggle=True)
         
-        # ===== DYNAMIC COLUMNS
-        # 1. Organize keys by category
+
         categories = {
             "math": [], "curves": [], "light": [], 
             "color": [], "alpha": [], "burn": [], "misc": []
@@ -176,11 +173,11 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
             cats_to_draw.append((key, categories[key.lower()]))
         
         catbox = layout.box()
-        # 4. Iterate and Draw
+        
+        # instead of making a new column for each category, just use a separator?
+        # BUT still 4 max per row, hmmm
         for cat_name, items in cats_to_draw:
-            # Skip empty categories
             if not items: continue
-            # else: layout.separator()
             t = 0
             for mode_key in items:
                 data = self.blend_map[mode_key]
@@ -189,21 +186,16 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
                     t += 1
             if t == 0: continue
 
-            # Create a vertical column for this category
             col = catbox.column(align=True)
             col.scale_y = 0.8
             col.alignment ="LEFT"
-            # Label for the column (Optional, makes it very tall)
-            # col.label(text=cat_name)
+            
             c = 0
-            t = 0
             for mode_key in items:
 
                 data = self.blend_map[mode_key]
                 tags = data[2]
 
-                # THE FREQUENT FILTER
-                # If "Show Frequent Only" is ON, and this item lacks the tag, skip it
                 if props.show_frequent_only and mode_key not in frequent_list:
                     continue
                 
@@ -212,7 +204,6 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
                     row.alignment = "LEFT"
                     
                 c += 1
-                t += 1
                 
                 display_text = data[0]
                 display_icon = data[1]
@@ -226,7 +217,9 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
             col.separator(factor=.5)
 
         layout.separator()
+        
         # ===== QUICK TOGGLES
+        
         layout.label(text="Quick toggles")
         
         settings = context.tool_settings.image_paint
@@ -247,7 +240,8 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         op.brush_mode = "ERASE"
         op = row.operator("bpsd.qb_brush_set", text="Brush")
         op.brush_mode = "PAINT"
-        # row.prop(settings, "seam_bleed", text="Bleed", icon='MOD_UVPROJECT')
+        
+        
         
         
 

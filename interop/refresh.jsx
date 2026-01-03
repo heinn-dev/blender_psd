@@ -1,3 +1,5 @@
+
+// TODO remember xmp, we might not need the meme file
 try {
     var scriptFile = new File($.fileName);
     var scriptFolder = scriptFile.parent;
@@ -27,17 +29,12 @@ function refreshDocument(pathStr) {
     }
 
     if (foundDoc) {
-        // --- NEW SAFETY CHECK ---
-        // this is actually useless, photoshop will warn us? if we do not flag donotsavechanges
-        if (foundDoc.saved === false) {
-            // Option A: Silent abort (User sees nothing, reload just fails)
-            // return;
 
-            // Option B: Loud failure (Recommended)
+        // just use default photoshop dialog? might b confusing
+        if (foundDoc.saved === false) {
             alert("BPSD Sync Aborted:\n\n'" + foundDoc.name + "' has unsaved changes in Photoshop.\n\nPlease save or revert your changes in Photoshop before syncing from Blender.");
             return;
         }
-        // ------------------------
 
         foundDoc.close(SaveOptions.DONOTSAVECHANGES);
         foundDoc = app.open(targetFile);
