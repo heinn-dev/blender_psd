@@ -12,7 +12,15 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
     # only show if we're painting something...
     @classmethod
     def poll(cls, context):
-        
+        # Check preferences
+        package_name = __package__
+        try:
+            prefs = context.preferences.addons[package_name].preferences
+            if not prefs.show_quick_brushes:
+                return False
+        except:
+            pass
+
         return True
         
         for window in bpy.context.window_manager.windows:
@@ -87,7 +95,9 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         brush = context.tool_settings.image_paint.brush
 
         # Get Preferences for Frequent Brushes
-        package_name = __package__.split('.')[0]
+        # In Blender 4.2 Extensions, __package__ is the full ID (e.g. "bl_ext.user_default.blender_psd")
+        # In Legacy, it is just "blender_psd"
+        package_name = __package__
         prefs = context.preferences.addons[package_name].preferences
         frequent_list = [x.strip() for x in prefs.frequent_brushes.split(',')]
 

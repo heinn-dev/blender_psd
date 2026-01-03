@@ -143,9 +143,16 @@ class BPSDPreferences(bpy.types.AddonPreferences):
         default="MIX,SCREEN,MUL,OVERLAY,LIGHTEN,DARKEN,SATURATION,ERASE_ALPHA"
     ) # type: ignore
 
+    show_quick_brushes: bpy.props.BoolProperty(
+        name="Show Quick Brushes Panel",
+        description="Enable the Quick Brushes panel in the 3D View",
+        default=True
+    ) # type: ignore
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "photoshop_exe_path")
+        layout.prop(self, "show_quick_brushes")
         layout.prop(self, "frequent_brushes")
 
 

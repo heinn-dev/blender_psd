@@ -79,7 +79,7 @@ class BPSD_OT_toggle_frequent(bpy.types.Operator):
         mode = brush.blend
 
         # Get Preferences
-        prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+        prefs = context.preferences.addons[__package__].preferences
         current_list = [x.strip() for x in prefs.frequent_brushes.split(',') if x.strip()]
 
         if mode in current_list:
