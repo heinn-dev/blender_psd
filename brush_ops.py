@@ -78,24 +78,24 @@ class BPSD_OT_toggle_frequent(bpy.types.Operator):
 
         mode = brush.blend
 
-        # Access the map
-        b_map = brush_panels.BPSD_PT_quick_brushes.blend_map
+        # Get Preferences
+        prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+        current_list = [x.strip() for x in prefs.frequent_brushes.split(',') if x.strip()]
 
-        if mode in b_map:
-            data = b_map[mode]
-            tags = data[2]
+        if mode in current_list:
+            current_list.remove(mode)
+            self.report({'INFO'}, f"Removed {mode} from Frequent")
+        else:
+            current_list.append(mode)
+            self.report({'INFO'}, f"Added {mode} to Frequent")
 
-            if "frequent" in tags:
-                tags.remove("frequent")
-                self.report({'INFO'}, f"Removed {mode} from Frequent")
-            else:
-                tags.append("frequent")
-                self.report({'INFO'}, f"Added {mode} to Frequent")
+        # Save back
+        prefs.frequent_brushes = ",".join(current_list)
 
-            # Force redraw
-            for window in context.window_manager.windows:
-                for area in window.screen.areas:
-                    if area.type == 'VIEW_3D':
-                        area.tag_redraw()
+        # Force redraw
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'VIEW_3D':
+                    area.tag_redraw()
 
         return {'FINISHED'}

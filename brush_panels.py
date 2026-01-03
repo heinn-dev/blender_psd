@@ -81,12 +81,18 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
     
     def draw(self, context):
         layout = self.layout
-        
+
         tool_settings = context.tool_settings.image_paint
         space = context.space_data
-        brush = context.tool_settings.image_paint.brush 
-        # ===== FALLOFF SELECT        
-        
+        brush = context.tool_settings.image_paint.brush
+
+        # Get Preferences for Frequent Brushes
+        package_name = __package__.split('.')[0]
+        prefs = context.preferences.addons[package_name].preferences
+        frequent_list = [x.strip() for x in prefs.frequent_brushes.split(',')]
+
+        # ===== FALLOFF SELECT
+
         layout.label(text="Brush Falloff")
         
         col = layout.column(align=True)
@@ -115,8 +121,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
 
         # Toggle current brush in frequent list
         if brush and brush.blend in self.blend_map:
-             tags = self.blend_map[brush.blend][2]
-             is_frequent = "frequent" in tags
+             is_frequent = brush.blend in frequent_list
              row.operator("bpsd.toggle_frequent", text="", icon='SOLO_ON', depress=is_frequent)
 
         # Create a second row for category toggles if you want them compact
@@ -167,29 +172,29 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
             if not items: continue
             # else: layout.separator()
             t = 0
-            for mode_key in items:    
+            for mode_key in items:
                 data = self.blend_map[mode_key]
                 tags = data[2]
-                if not props.show_frequent_only or "frequent" in tags:
+                if not props.show_frequent_only or mode_key in frequent_list:
                     t += 1
             if t == 0: continue
-            
+
             # Create a vertical column for this category
             col = catbox.column(align=True)
             col.scale_y = 0.8
             col.alignment ="LEFT"
             # Label for the column (Optional, makes it very tall)
-            # col.label(text=cat_name) 
+            # col.label(text=cat_name)
             c = 0
             t = 0
             for mode_key in items:
-                
+
                 data = self.blend_map[mode_key]
                 tags = data[2]
-                
+
                 # THE FREQUENT FILTER
                 # If "Show Frequent Only" is ON, and this item lacks the tag, skip it
-                if props.show_frequent_only and "frequent" not in tags:
+                if props.show_frequent_only and mode_key not in frequent_list:
                     continue
                 
                 if c % 4 == 0:

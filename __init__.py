@@ -137,9 +137,16 @@ class BPSDPreferences(bpy.types.AddonPreferences):
         default=r"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" # Common default
     ) # type: ignore
 
+    frequent_brushes: bpy.props.StringProperty(
+        name="Frequent Brushes",
+        description="Comma-separated list of frequent blend modes",
+        default="MIX,SCREEN,MUL,OVERLAY,LIGHTEN,DARKEN,SATURATION,ERASE_ALPHA"
+    ) # type: ignore
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "photoshop_exe_path")
+        layout.prop(self, "frequent_brushes")
 
 
 # --- CONNECT OPERATOR ---psd_height
