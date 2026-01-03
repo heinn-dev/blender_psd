@@ -15,10 +15,6 @@ def init_dirty_cache():
         # DIRTY_STATE_CACHE[img.name] = img.is_dirty
 
 def image_dirty_watcher():
-    """
-    Called via timer to poll for image dirty state changes.
-    We scan to see which managed image just became clean (Saved).
-    """
     context = bpy.context
     if not hasattr(context, "scene") or not context.scene:
         return 1
@@ -62,7 +58,6 @@ def tag_image(image, psd_path, layer_path, layer_index, is_mask=False, layer_id=
     image["bpsd_managed"] = True
 
 def find_loaded_image(psd_path, layer_index, is_mask, layer_id=0):
-    """Returns the bpy.types.Image if it exists, else None."""
     for img in bpy.data.images:
         if img.get("psd_path") != psd_path: continue
         if img.get("psd_is_mask", False) != is_mask: continue
@@ -79,7 +74,6 @@ def find_loaded_image(psd_path, layer_index, is_mask, layer_id=0):
     return None
 
 def focus_image_editor(context, image):
-    """Forces the active Image Editor to show the given image."""
     for area in context.screen.areas:
         if area.type == 'IMAGE_EDITOR':
             area.spaces.active.image = image
@@ -124,10 +118,6 @@ def run_photoshop_refresh(target_psd_path):
         print("Linux is not supported for Photoshop interop.")
 
 def is_photoshop_file_unsaved(target_psd_path):
-    """
-    Asks Photoshop if the specific file has unsaved changes.
-    Returns True (Unsaved), False (Clean/Closed), or None (Error).
-    """
     current_dir = os.path.dirname(__file__)
     
     try:

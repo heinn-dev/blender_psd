@@ -332,6 +332,7 @@ def auto_sync_check():
 # --- REGISTRATION ---
 
 classes = (
+    BPSDPreferences,
     BPSD_LayerItem,
     BPSD_SceneProperties,
     BPSD_OT_connect_psd,
@@ -345,14 +346,13 @@ classes = (
     ui_ops.BPSD_OT_reload_all,
         
     panels.BPSD_PT_main_panel,
-    panels.BPSD_PT_layer_context,
     
     brush_ops.BPSD_OT_qb_brush_blend,
     brush_ops.BPSD_OT_qb_brush_falloff,
     brush_ops.BPSD_OT_qb_brush_set,
     brush_ops.BPSD_OT_toggle_frequent,
     brush_panels.BPSD_PT_quick_brushes,
-    BPSDPreferences
+    panels.BPSD_PT_layer_context,
 )
 
 def register():
