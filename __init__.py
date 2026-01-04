@@ -220,7 +220,7 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             # This allows the "Update Nodes" operator to handle these changes without a full regeneration warning.
 
             # Base topology
-            part = f"{item.layer_id}:{item.layer_type}:{item.indent}:{item.is_clipping_mask}:{item.has_mask}"
+            part = f"{item.layer_id}:{item.layer_type}:{item.indent}:{item.is_clipping_mask}:{item.has_mask}:{item.clip_base_index}"
 
             # Groups use blend mode for topology (Passthrough vs Normal)
             if item.layer_type == 'GROUP':
