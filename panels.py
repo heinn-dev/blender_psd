@@ -184,5 +184,20 @@ class BPSD_PT_layer_context(bpy.types.Panel):
         
         row = box.row()
         op = row.operator("bpsd.save_layer", text="Force Save", icon='FILE_TICK')
-        
+
+class BPSD_PT_nodes(bpy.types.Panel):
+    bl_label = "Node Operations"
+    bl_idname = "BPSD_PT_nodes"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'BPSD'
+    bl_parent_id = "BPSD_PT_main_panel"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("bpsd.create_layer_node", icon='NODETREE')
+        layout.operator("bpsd.create_layer_frame", icon='FRAME_PREV')
+        layout.operator("bpsd.create_group_nodes", icon='FILE_FOLDER')
+        layout.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="Create PSD Output")
         

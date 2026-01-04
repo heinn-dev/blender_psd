@@ -18,6 +18,7 @@ from . import ui_ops
 from . import brush_ops
 from . import brush_panels
 from . import panels
+from . import node_ops
 
 # --- DATA STRUCTURES ---
 
@@ -31,6 +32,8 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     is_clipping_mask: bpy.props.BoolProperty(default=False)# type: ignore
     is_visible: bpy.props.BoolProperty(default=False)# type: ignore
     hidden_by_parent: bpy.props.BoolProperty(default=False)# type: ignore
+    blend_mode: bpy.props.StringProperty(default="NORMAL")# type: ignore
+    opacity: bpy.props.FloatProperty(default=1.0)# type: ignore
 
 
 class BPSD_SceneProperties(bpy.types.PropertyGroup):
@@ -206,7 +209,7 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
         bpy.ops.bpsd.reload_all('EXEC_DEFAULT')
 
         if os.path.exists(props.active_psd_path):
-            props.last_known_mtime = os.path.getmtime(props.active_psd_path)
+            props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
 
         # Also reload the main PSD image in Blender if it exists
         if props.active_psd_image != 'NONE':
@@ -236,6 +239,8 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             item.is_clipping_mask = node['is_clipping_mask']
             item.is_visible = node['is_visible']
             item.hidden_by_parent = node.get('hidden_by_parent', False)
+            item.blend_mode = node.get('blend_mode', 'NORMAL')
+            item.opacity = node.get('opacity', 1.0)
 
             if node['children']:
                 self.flatten_tree(node['children'], collection, indent + 1)
@@ -367,6 +372,11 @@ classes = (
     brush_ops.BPSD_OT_toggle_frequent,
     brush_panels.BPSD_PT_quick_brushes,
     panels.BPSD_PT_layer_context,
+    panels.BPSD_PT_nodes,
+    node_ops.BPSD_OT_create_layer_node,
+    node_ops.BPSD_OT_create_layer_frame,
+    node_ops.BPSD_OT_create_group_nodes,
+    node_ops.BPSD_OT_create_psd_nodes,
 )
 
 def register():
