@@ -49,11 +49,11 @@ def read_file(path):
                 "is_visible": layer.is_visible,
                 "hidden_by_parent": not parent_visible,
                 "layer_id" : layer.layer_id,
-                "blend_mode": str(layer.blend_mode).replace("Enum.BlendMode.", "").strip(),
+                "blend_mode": str(layer.blend_mode).replace("BlendMode.", "").strip(),
                 "opacity": layer.opacity , # / 255.0 this is accessed as a flat despite being stored as an int internally
                 "children": []
             }
-            # print(f"layer {layer_name} has id {layer.layer_id}")
+            print(f"layer {layer_name} has blend mode {node['blend_mode']}")
             # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
 
             # if you wanna have a visibility system that's pararrel to PS, probably just move this stuff out from here...
