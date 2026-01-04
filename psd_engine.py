@@ -158,6 +158,14 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
     # --- COLOR PATH ---
     else:
         planar_data = layer.get_image_data()
+
+        # DEBUG: Investigate White Texture Bug
+        if planar_data:
+             for k, v in planar_data.items():
+                 print(f"DEBUG LAYER '{layer.name}' Ch {k}: Shape={v.shape}, Dtype={v.dtype}, Min={v.min()}, Max={v.max()}")
+        else:
+             print(f"DEBUG LAYER '{layer.name}': No planar data found.")
+
         if not planar_data:
             return np.zeros(target_w * target_h * 4, dtype=np.float32)
 
@@ -177,7 +185,7 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
         if 0 in planar_data: paste_to_canvas(c_r, planar_data[0], target_w, target_h, layer_left, layer_top)
         if 1 in planar_data: paste_to_canvas(c_g, planar_data[1], target_w, target_h, layer_left, layer_top)
         if 2 in planar_data: paste_to_canvas(c_b, planar_data[2], target_w, target_h, layer_left, layer_top)
-        
+
         if -1 in planar_data:
             paste_to_canvas(c_a, planar_data[-1], target_w, target_h, layer_left, layer_top)
         else:
@@ -193,7 +201,7 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
 
         img_stack = np.stack([c_r, c_g, c_b, c_a], axis=-1)
         img_stack = np.flipud(img_stack)
-        
+
         return (img_stack.astype(np.float32) / 255.0).flatten()
 
 # --- EXISTING FUNCTIONS (Simplified wrappers) ---
