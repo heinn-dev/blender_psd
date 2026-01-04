@@ -7,12 +7,32 @@ import subprocess
 import time
 
 # --- CACHE & WATCHER ---
-DIRTY_STATE_CACHE = {}
+
+class BPSD_RuntimeState:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(BPSD_RuntimeState, cls).__new__(cls)
+            cls._instance.dirty_cache = {}
+        return cls._instance
+
+    def clear(self):
+        self.dirty_cache.clear()
+
+    def get_dirty(self, image_name):
+        return self.dirty_cache.get(image_name, False)
+
+    def set_dirty(self, image_name, is_dirty):
+        self.dirty_cache[image_name] = is_dirty
+
+# Global singleton instance
+runtime_state = BPSD_RuntimeState()
 
 def init_dirty_cache():
-    DIRTY_STATE_CACHE.clear()
+    runtime_state.clear()
     # for img in bpy.data.images:
-        # DIRTY_STATE_CACHE[img.name] = img.is_dirty
+        # runtime_state.set_dirty(img.name, img.is_dirty)
 
 def image_dirty_watcher():
     context = bpy.context
@@ -27,8 +47,8 @@ def image_dirty_watcher():
             continue
 
         current_dirty = img.is_dirty
-        was_dirty = DIRTY_STATE_CACHE.get(img.name, False)
-        DIRTY_STATE_CACHE[img.name] = current_dirty
+        was_dirty = runtime_state.get_dirty(img.name)
+        runtime_state.set_dirty(img.name, current_dirty)
 
         # Transition: Dirty -> Clean (User Saved)
         if was_dirty and not current_dirty:
@@ -219,22 +239,27 @@ class BPSD_OT_load_layer(bpy.types.Operator):
             self.report({'ERROR'}, "Failed to read layer.")
             return {'CANCELLED'}
 
-        # 3. Create Image
-        # Include layer index to disambiguate layers with identical names
-        psd_name = props.active_psd_path.replace("\\", "/")
-        psd_name = psd_name.split("/")[-1]
+        # 3. Create or Find Image
         layer_idx = props.active_layer_index
-        # Get display name from layer list (target_layer is now an index path like "0/2")
-        display_name = props.layer_list[layer_idx].name if layer_idx < len(props.layer_list) else target_layer
-        layer_name = f"{psd_name}/{layer_idx:03d}_{display_name}"
-        img_name = f"{layer_name}_MASK" if is_mask else layer_name
+        img = find_loaded_image(psd_path, layer_idx, is_mask, self.layer_id)
 
-        if img_name in bpy.data.images:
-            img = bpy.data.images[img_name]
-            if img.size[0] != w or img.size[1] != h:
-                img.scale(w, h)
-        else:
+        if not img:
+            # Include layer index to disambiguate layers with identical names
+            psd_name = props.active_psd_path.replace("\\", "/")
+            psd_name = psd_name.split("/")[-1]
+
+            # Get display name from layer list (target_layer is now an index path like "0/2")
+            display_name = props.layer_list[layer_idx].name if layer_idx < len(props.layer_list) else target_layer
+            layer_name = f"{psd_name}/{layer_idx:03d}_{display_name}"
+            img_name = f"{layer_name}_MASK" if is_mask else layer_name
+
+            # If find_loaded_image didn't return anything, we must create a new one.
+            # Do NOT reuse an existing image by name (it might belong to a different PSD
+            # with the same filename). Blender will handle name uniqueness (e.g. .001).
             img = bpy.data.images.new(img_name, width=w, height=h, alpha=True)
+
+        if img.size[0] != w or img.size[1] != h:
+            img.scale(w, h)
 
         if len(pixels) > 0:
             img.pixels.foreach_set(pixels)
@@ -301,7 +326,7 @@ def perform_save_images(context, psd_path, images):
         for img in valid_images:
             try:
                 img.pack()
-                DIRTY_STATE_CACHE[img.name] = False
+                runtime_state.set_dirty(img.name, False)
             except Exception as e:
                 print(f"Error packing {img.name}: {e}")
 
@@ -622,20 +647,21 @@ class BPSD_OT_load_all_layers(bpy.types.Operator):
 
         # Identify which layers need loading
         for i, item in enumerate(props.layer_list):
-            if item.layer_type in ["GROUP", "ADJUSTMENT", "UNKNOWN"]:
+            if item.layer_type == "UNKNOWN":
                 continue
 
-            # Color
-            requests.append({
-                'layer_path': item.path,
-                'layer_index': i,
-                'width': props.psd_width,
-                'height': props.psd_height,
-                'is_mask': False,
-                'layer_id': item.layer_id
-            })
+            # Color (Skip for Groups/Adjustment layers as they don't have pixel content)
+            if item.layer_type not in ["GROUP", "ADJUSTMENT"]:
+                requests.append({
+                    'layer_path': item.path,
+                    'layer_index': i,
+                    'width': props.psd_width,
+                    'height': props.psd_height,
+                    'is_mask': False,
+                    'layer_id': item.layer_id
+                })
 
-            # Mask
+            # Mask (Load for any layer type that has a mask)
             if item.has_mask:
                  requests.append({
                     'layer_path': item.path,
@@ -661,14 +687,16 @@ class BPSD_OT_load_all_layers(bpy.types.Operator):
             if idx >= len(props.layer_list): continue
             item = props.layer_list[idx]
 
-            # Naming convention from load_layer
-            display_name = item.name
-            layer_name = f"{psd_name}/{idx:03d}_{display_name}"
-            img_name = f"{layer_name}_MASK" if is_mask else layer_name
+            img = find_loaded_image(active_psd, idx, is_mask, item.layer_id)
 
-            img = bpy.data.images.get(img_name)
             if not img:
-                 img = bpy.data.images.new(img_name, width=props.psd_width, height=props.psd_height, alpha=True)
+                # Naming convention from load_layer
+                display_name = item.name
+                layer_name = f"{psd_name}/{idx:03d}_{display_name}"
+                img_name = f"{layer_name}_MASK" if is_mask else layer_name
+
+                # Always create new if not found by tag
+                img = bpy.data.images.new(img_name, width=props.psd_width, height=props.psd_height, alpha=True)
 
             # Resize if needed
             if img.size[0] != props.psd_width or img.size[1] != props.psd_height:

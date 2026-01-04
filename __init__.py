@@ -85,7 +85,6 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
         default=False
     ) # type: ignore
 
-    #last_known_mtime: bpy.props.FloatProperty(default=0.0) # type: ignore
     last_known_mtime_str: bpy.props.StringProperty(default="0.0") # type: ignore
     structure_signature: bpy.props.StringProperty() # type: ignore
 
@@ -124,20 +123,6 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
 class BPSDPreferences(bpy.types.AddonPreferences):
     bl_idname = __name__ # Refers to the module name
 
-    photoshop_exe_path: bpy.props.StringProperty(
-        name="Photoshop Executable",
-        description="Path to Photoshop.exe (e.g. C:/Program Files/Adobe/Adobe Photoshop 2024/Photoshop.exe)",
-        subtype='FILE_PATH',
-        default=r"C:\Program Files\Adobe\Adobe Photoshop 2023\Photoshop.exe" # Common default
-    ) # type: ignore
-    
-    ahk_exe_path: bpy.props.StringProperty(
-        name="AHK Executable",
-        description="Path to AutoHotkey.exe",
-        subtype='FILE_PATH',
-        default=r"C:\\Program Files\\AutoHotkey\\AutoHotkey.exe" # Common default
-    ) # type: ignore
-
     frequent_brushes: bpy.props.StringProperty(
         name="Frequent Brushes",
         description="Comma-separated list of frequent blend modes",
@@ -152,15 +137,12 @@ class BPSDPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        
-        # we aren't using it or AHK anymore, hide it but keep in there for now
-        
-        # layout.prop(self, "photoshop_exe_path")
+
         layout.prop(self, "show_quick_brushes")
         layout.prop(self, "frequent_brushes")
 
 
-# --- CONNECT OPERATOR ---psd_height
+# --- CONNECT OPERATOR ---
 
 class BPSD_OT_connect_psd(bpy.types.Operator):
     bl_idname = "bpsd.connect_psd"
@@ -179,10 +161,7 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
                 props.active_psd_path = os.path.normpath(abs_path)
 
         path = props.active_psd_path
-        
-        # file = psd_engine.read_file(path)
-        # return {'FINISHED'}
-        
+
         # 1. Read
         tree_data,w,h = psd_engine.read_file(path)
         if not tree_data:
@@ -380,9 +359,8 @@ def auto_sync_check():
 
             # Update IMMEDIATELY to prevent double-triggering next tick
             props.last_known_mtime_str = str(current_mtime)
-            
+
             if context.window:
-                # bpy.ops.bpsd.reload_all('EXEC_DEFAULT')
                 bpy.ops.bpsd.connect_psd('EXEC_DEFAULT')
                 
     except Exception as e:

@@ -22,26 +22,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
             pass
 
         return True
-        
-        #  this is just fucked
-        for window in bpy.context.window_manager.windows:
-            for area in window.screen.areas:
-                if area.type == 'VIEW3D':
-                    # if bpy.context.view_layer.objects.active:
-                    #     if bpy.context.object.mode == 'PAINT_TEXTURE':
-                    #         return True
-                    return True
-                
-                # we need another panel in here too hmmmmmm
-                
-                # if area.type == 'IMAGE_EDITOR':
-                #     for space in area.spaces:
-                #         if space.type == 'IMAGE_EDITOR':
-                #             if space.mode == 'PAINT':
-                #                 return True
-            return False
-        
-        
+
     # enum in ['MIX', 'DARKEN', 'MUL', 'COLORBURN', 'LINEARBURN', 'LIGHTEN', 
     # 'SCREEN', 'COLORDODGE', 'ADD', 'OVERLAY', 'SOFTLIGHT', 'HARDLIGHT', 
     # 'VIVIDLIGHT', 'LINEARLIGHT', 'PINLIGHT', 'DIFFERENCE', 'EXCLUSION', 
@@ -132,19 +113,8 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
              is_frequent = brush.blend in frequent_list
              row.operator("bpsd.toggle_frequent", text="", icon='SOLO_ON', depress=is_frequent)
 
-        # too much clutter, not really useful...
-        # row = layout.row(align=True)
-        # row.scale_x = 0.8 # Make toggles smaller to fit
-        # row.prop(props, "show_cat_math", toggle=True)
-        # row.prop(props, "show_cat_curves", toggle=True)
-        # row.prop(props, "show_cat_light", toggle=True)
-        # row.prop(props, "show_cat_color", toggle=True)
-        # row.prop(props, "show_cat_burn", toggle=True)
-        # row.prop(props, "show_cat_alpha", toggle=True)
-        
-
         categories = {
-            "math": [], "curves": [], "light": [], 
+            "math": [], "curves": [], "light": [],
             "color": [], "alpha": [], "burn": [], "misc": []
         }
         
@@ -162,13 +132,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         
         # 3. Define which columns to actually draw based on toggles
         cats_to_draw = []
-        # if props.show_cat_misc: cats_to_draw.append(("Misc", categories["misc"]))
-        # if props.show_cat_curves: cats_to_draw.append(("Curves", categories["curves"]))
-        # if props.show_cat_math: cats_to_draw.append(("Math", categories["math"]))
-        # if props.show_cat_light: cats_to_draw.append(("Light", categories["light"]))
-        # if props.show_cat_burn: cats_to_draw.append(("Burn", categories["burn"]))
-        # if props.show_cat_color: cats_to_draw.append(("Color", categories["color"]))
-        # if props.show_cat_alpha: cats_to_draw.append(("Alpha", categories["alpha"]))
+
         for key in categories.keys():
             cats_to_draw.append((key, categories[key.lower()]))
         

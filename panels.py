@@ -1,6 +1,88 @@
 import bpy
 import os
 
+
+def draw_layer_item(layout, props, item, index, current_indent):
+    """
+    Draws a single layer row (Icon, Name, Mask, Visibility)
+    """
+    # 1. Row Setup
+    split = layout.split(factor=0.75)
+    row = split.row(align=True)
+    vis_row = split.row(align=True)
+    vis_row.alignment = 'RIGHT'
+
+    if item.visibility_override != 'PSD':
+        vis_row.alert = True
+
+    is_active_row = (index == props.active_layer_index)
+
+    # 2. Icon Selection
+    ind = current_indent
+    if item.layer_type == "GROUP":
+        icon = 'FILE_FOLDER'
+        ind -= 1
+    elif item.layer_type == "SMART":
+        icon = 'OUTLINER_DATA_LATTICE'
+    elif item.layer_type == "ADJUSTMENT":
+        icon = 'CURVE_DATA'
+    elif item.layer_type == "UNKNOWN":
+        icon = 'FILE'
+    else:
+        icon = 'IMAGE_DATA'
+
+    # 3. Visibility Icon
+    effective_vis = item.is_visible
+    if item.visibility_override == 'SHOW': effective_vis = True
+    elif item.visibility_override == 'HIDE': effective_vis = False
+
+    if item.hidden_by_parent:
+        eye = "KEYFRAME"
+    else:
+        eye = "LAYER_ACTIVE" if effective_vis else "LAYER_USED"
+
+    # 4. Indentation Spacer
+    row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
+    row.alignment = 'LEFT'
+
+    # 5. Clipping Indicator
+    if item.is_clipping_mask:
+        row.label(text='', icon = 'TRACKING_FORWARDS')
+
+    # 6. Name / Select Operator
+    if item.layer_type in {"GROUP", "SMART", "ADJUSTMENT", "UNKNOWN"}:
+        layer_sub = row.row(align=True)
+        layer_sub.alignment = 'LEFT'
+        layer_sub.enabled = False
+        op = layer_sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False )
+    else:
+        layer_sub = row.row(align=True)
+        layer_sub.alert = (is_active_row and not props.active_is_mask)
+        layer_sub.alignment = 'LEFT'
+
+        op = layer_sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False )
+        op.index = index
+        op.path = item.path
+        op.layer_id = item.layer_id
+        op.is_mask = False
+
+    # 7. Mask Button
+    if item.has_mask:
+        mask_sub = row.row(align=True)
+        mask_sub.alert = (is_active_row and props.active_is_mask)
+        mask_sub.alignment = 'LEFT'
+
+        op = mask_sub.operator( "bpsd.select_layer", icon='MOD_MASK', emboss=False, text="" )
+        op.index = index
+        op.path = item.path
+        op.layer_id = item.layer_id
+        op.is_mask = True
+
+    # 8. Visibility Toggle
+    op = vis_row.operator("bpsd.toggle_visibility", text="", icon=eye, emboss=False)
+    op.index = index
+
+
 class BPSD_PT_main_panel(bpy.types.Panel):
     bl_label = "Photoshop Sync"
     bl_idname = "BPSD_PT_main_panel"
@@ -12,6 +94,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         layout = self.layout
         props = context.scene.bpsd_props
 
+        # --- SYNC CONTROLS ---
         sync_col = layout.column(align=True)
 
         sync_col.prop(props, "active_psd_image", text="")
@@ -36,32 +119,33 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
         if props.active_psd_path and len(props.layer_list) > 0:
             sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
-        
+
         row = sync_col.row(align=True)
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='FILE_REFRESH' if props.auto_sync_incoming else 'CANCEL')
         row.prop(props, "auto_refresh_ps", text="Sync to PS", icon='FILE_REFRESH' if props.auto_refresh_ps else 'CANCEL')
         row.enabled = is_valid
 
-        
+
         if not is_valid: return
         if len(props.layer_list) == 0: return
-        
+
         layout.separator()
         layout.label(text="Layers", icon ="RENDERLAYERS")
 
+        # --- LAYER TREE ---
         root_box = layout.box()
-        root_col = root_box.column(align=True) 
+        root_col = root_box.column(align=True)
 
         layout_stack = [root_col]
         current_indent = 0
 
         for i, item in enumerate(props.layer_list):
 
+            # 1. Manage Indentation / Hierarchy
             if item.indent < current_indent:
                 for _ in range(current_indent - item.indent):
                     if len(layout_stack) > 1:
                         layout_stack.pop()
-
                 current_indent = item.indent
 
             parent_layout = layout_stack[-1]
@@ -71,94 +155,29 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 current_layout = box.column(align=True)
             else:
                 current_layout = parent_layout
-            
-            split = current_layout.split(factor=0.75)
-            row = split.row(align=True)
-            vis_row = split.row(align=True)
-            vis_row.alignment = 'RIGHT'
-            if item.visibility_override != 'PSD':
-                vis_row.alert = True
-            
 
-            is_active_row = (i == props.active_layer_index)
-            ind = current_indent
+            # 2. Draw Item
+            draw_layer_item(current_layout, props, item, i, current_indent)
 
-            if item.layer_type == "GROUP":
-                icon = 'FILE_FOLDER'
-                ind -= 1
-            elif item.layer_type == "SMART":
-                icon = 'OUTLINER_DATA_LATTICE'
-            elif item.layer_type == "ADJUSTMENT":
-                icon = 'CURVE_DATA'
-            elif item.layer_type == "UNKNOWN":
-                icon = 'FILE'
-            else:
-                icon = 'IMAGE_DATA'
-            
-            effective_vis = item.is_visible
-            if item.visibility_override == 'SHOW': effective_vis = True
-            elif item.visibility_override == 'HIDE': effective_vis = False
-
-            if item.hidden_by_parent:
-                eye = "KEYFRAME"
-            else:
-                eye = "LAYER_ACTIVE" if effective_vis else "LAYER_USED"
-
-            row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
-            row.alignment = 'LEFT'
-
-            if item.is_clipping_mask:
-                row.label(text='', icon = 'TRACKING_FORWARDS')
-
-            if item.layer_type in {"GROUP", "SMART", "ADJUSTMENT", "UNKNOWN"}:
-                # row.label(text=item.name, icon=icon)
-                layer_sub = row.row(align=True)
-                layer_sub.alignment = 'LEFT'
-                layer_sub.enabled = False
-                op = layer_sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False )
-            else:
-                layer_sub = row.row(align=True)
-                layer_sub.alert = (is_active_row and not props.active_is_mask)
-                layer_sub.alignment = 'LEFT'
-
-                op = layer_sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False )
-                op.index = i
-                op.path = item.path
-                op.layer_id = item.layer_id
-                op.is_mask = False
-
-            if item.has_mask:
-                mask_sub = row.row(align=True)
-                mask_sub.alert = (is_active_row and props.active_is_mask)
-                mask_sub.alignment = 'LEFT'
-
-                op = mask_sub.operator( "bpsd.select_layer", icon='MOD_MASK', emboss=False, text="" ) #  text="Mask"
-                op.index = i
-                op.path = item.path
-                op.layer_id = item.layer_id
-                op.is_mask = True
-
+            # 3. Push Stack for Groups
             if item.layer_type == "GROUP":
                 layout_stack.append(current_layout)
                 current_indent += 1
 
-            op = vis_row.operator("bpsd.toggle_visibility", text="", icon=eye, emboss=False)
-            op.index = i
-                
-            
-    
+        # --- FOOTER ---
         psd_name = props.active_psd_path.replace("\\", "/")
         psd_name = psd_name.split("/")[-1]
         layout.box().operator("bpsd.highlight_psd", text=f"{psd_name}", icon='IMAGE_DATA',emboss=False)
         layout.separator()
 
         row = layout.row(align=True)
-        row.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="Regenerate Nodes")
-        row.operator("bpsd.update_psd_nodes", icon='FILE_REFRESH', text="Update Values")
+        row.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="PSD Nodes")
+        row.operator("bpsd.update_psd_nodes", icon='FILE_REFRESH', text="Update Nodes")
 
         row = layout.row(align=True)
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
         row.prop(props, "auto_save_on_image_save", text="", icon='CHECKMARK' if props.auto_save_on_image_save else 'CANCEL', toggle=True)
+
         
 
 class BPSD_PT_layer_context(bpy.types.Panel):
@@ -169,7 +188,7 @@ class BPSD_PT_layer_context(bpy.types.Panel):
     bl_category = 'BPSD'
     bl_parent_id = "BPSD_PT_main_panel"
     bl_options = {"DEFAULT_CLOSED"}
-    
+
     @classmethod
     def poll(cls, context):
         return context.scene.bpsd_props is not None

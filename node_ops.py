@@ -34,10 +34,6 @@ def get_effective_visibility(item):
         return False
     if item.visibility_override == 'SHOW':
         return True
-    # PSD Mode
-    # We ignore hidden_by_parent because the node tree hierarchy naturally handles
-    # parent visibility (parent mix node will mute the branch).
-    # This allows us to "Force Show" a parent and have children appear.
     return item.is_visible
 
 def get_immediate_children(layer_list, parent_index):
@@ -81,7 +77,7 @@ def inline_mix_logic(nodes, links, blend_mode, opacity, is_visible,
                      opacity_label="* Opacity"):
     """
     Generates the mixing nodes directly into the tree (No groups).
-    Returns (out_color_socket, out_alpha_socket).
+    Returns (out_color_socket, out_alpha_socket, fac_socket).
     """
     x, y = location
 
@@ -145,12 +141,6 @@ def inline_mix_logic(nodes, links, blend_mode, opacity, is_visible,
     # --- IF FIRST LAYER (No Bottom) ---
     if socket_bot_color is None:
         # Just return the layer color/alpha (processed by opacity/mask)
-        # However, we must ensure we output (Color, Alpha) where Alpha is the Factor.
-
-        # Color: Just pass through the layer color.
-        # If the layer has no color input (e.g. error?), default to white?
-        # But socket_layer_color should be valid if we are here, or handled by caller.
-
         return socket_layer_color, fac_socket, fac_socket
 
     # 2. Calc Out Alpha = Fac + BottomAlpha * (1 - Fac)
@@ -221,42 +211,207 @@ def inline_mix_logic(nodes, links, blend_mode, opacity, is_visible,
 
     return out_color, out_alpha, fac_socket
 
+# --- HIERARCHY HELPERS ---
 
-def build_hierarchy_recursive(nodes, links, props, parent_index,
-                              bottom_color_socket, bottom_alpha_socket,
-                              x_loc, y_loc):
-    """
-    Recursive function to build the stack.
-    parent_index: -1 for root.
-    Returns (final_color_socket, final_alpha_socket, next_x_loc)
-    """
+def _get_socket_from_image(nodes, image, label, x, y, parent=None, layer_id=0):
+    if not image: return None, None
+    t_node = nodes.new('ShaderNodeTexImage')
+    t_node.image = image
+    t_node.label = label
+    t_node.location = (x, y)
+    if parent: t_node.parent = parent
+    if layer_id > 0: t_node["bpsd_layer_id"] = layer_id
 
-    # Get children indices
+    if label == "Layer Mask" or label == "Group Mask":
+        if t_node.image: t_node.image.colorspace_settings.name = 'Non-Color'
+        return t_node.outputs['Color'], None
+    else:
+        if t_node.image: t_node.image.colorspace_settings.name = 'sRGB'
+        return t_node.outputs['Color'], t_node.outputs['Alpha']
+
+def _get_layer_content(nodes, links, props, item, index, x, y, frame):
+    """
+    Returns (col_socket, alp_socket, mask_socket) for a single layer (non-recursive).
+    """
+    # Color
+    col_img = ui_ops.find_loaded_image(props.active_psd_path, index, False, item.layer_id)
+    c_sock, a_sock = None, None
+
+    if col_img:
+        c_sock, a_sock = _get_socket_from_image(nodes, col_img, "Layer Color", x + 50, y, frame, item.layer_id)
+    else:
+        # Placeholder
+        rgb = nodes.new('ShaderNodeRGB')
+        rgb.outputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+        rgb.label = "Placeholder"
+        rgb.location = (x + 50, y)
+        rgb.parent = frame
+        if item.layer_id > 0: rgb["bpsd_layer_id"] = item.layer_id
+        c_sock = rgb.outputs[0]
+
+        val = nodes.new('ShaderNodeValue')
+        val.outputs[0].default_value = 1.0
+        val.location = (x + 50, y - 100)
+        val.parent = frame
+        if item.layer_id > 0: val["bpsd_layer_id"] = item.layer_id
+        a_sock = val.outputs[0]
+
+    # Mask
+    m_sock = None
+    if item.has_mask:
+        mask_img = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
+        if mask_img:
+            m_sock, _ = _get_socket_from_image(nodes, mask_img, "Layer Mask", x + 50, y - 300, frame, item.layer_id)
+
+    return c_sock, a_sock, m_sock
+
+
+def _create_item_frame(nodes, item, x, y):
+    frame = nodes.new('NodeFrame')
+    frame.label = item.name
+    frame.use_custom_color = True
+    frame.color = (0.2, 0.3, 0.4) if item.layer_type != 'GROUP' else (0.4, 0.3, 0.2)
+    frame.location = (x, y)
+    if item.layer_id > 0: frame["bpsd_layer_id"] = item.layer_id
+    return frame
+
+def _resolve_item_content(nodes, links, props, item, index, x, y, frame):
+    """
+    Returns (col, alp, mask, next_x)
+    Unified fetcher for both Group (recursive) and Layer content.
+    """
+    col, alp, mask = None, None, None
+    next_x = x
+
+    if item.layer_type == 'GROUP':
+        # Recurse
+        col, alp, child_end_x = build_hierarchy_recursive(
+            nodes, links, props, index,
+            None, None,
+            x + 300, y
+        )
+        # For groups, we advance past the children
+        next_x = child_end_x + 200
+
+        # Group Mask
+        if item.has_mask:
+            mask_img = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
+            if mask_img:
+                mask, _ = _get_socket_from_image(nodes, mask_img, "Group Mask", next_x + 50, y - 300, frame, item.layer_id)
+    else:
+        # Layer Content
+        col, alp, mask = _get_layer_content(nodes, links, props, item, index, x, y, frame)
+        # For layers, we don't advance x inside the content block itself
+
+    return col, alp, mask, next_x
+
+def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_layers, current_col, current_alp, x_loc, y_loc):
+    """
+    Handles one base layer + its clipping masks.
+    Returns (out_col, out_alp, next_x)
+    """
+    cursor_x = x_loc
+
+    # 1. Create Frame
+    frame = _create_item_frame(nodes, base_item, cursor_x, y_loc)
+
+    # 2. Get Base Content
+    base_col, base_alp, base_mask, content_end_x = _resolve_item_content(
+        nodes, links, props, base_item, base_idx, cursor_x, y_loc, frame
+    )
+
+    # Handle Empty Groups
+    if base_item.layer_type == 'GROUP':
+        if base_col is None:
+            nodes.remove(frame)
+            return current_col, current_alp, cursor_x
+        cursor_x = content_end_x
+
+    # 3. Prepare Base (Isolated Mix)
+    eff_opacity = base_item.opacity if base_item.layer_type in ['LAYER', 'SMART', 'GROUP'] else 0.0
+
+    iso_col, iso_alp, iso_fac = inline_mix_logic(
+        nodes, links, 'NORMAL', eff_opacity, get_effective_visibility(base_item),
+        base_mask, base_col, base_alp,
+        None, None,
+        location=(cursor_x + 300, y_loc), parent=frame,
+        layer_id=base_item.layer_id, opacity_label="* Opacity"
+    )
+
+    clip_mask_socket = iso_fac
+    group_accum_col = iso_col
+    group_accum_alp = iso_alp
+
+    cursor_x += 1000
+
+    # 4. Process Clipping Layers
+    for clip_idx, clip_item in clipping_layers:
+
+        # Create small frame for clip
+        c_frame = _create_item_frame(nodes, clip_item, cursor_x, y_loc + 100)
+
+        c_col, c_alp, c_mask, c_end_x = _resolve_item_content(
+            nodes, links, props, clip_item, clip_idx, cursor_x, y_loc + 100, c_frame
+        )
+
+        if clip_item.layer_type == 'GROUP':
+             if c_col is None:
+                 nodes.remove(c_frame)
+                 continue # Skip empty clip group
+
+             # For groups, the content is wide, so we mix to the right of it
+             mix_x = c_end_x + 300
+        else:
+             mix_x = cursor_x + 300
+
+        # Mix Clip
+        c_eff_opacity = clip_item.opacity if clip_item.layer_type in ['LAYER', 'SMART', 'GROUP'] else 0.0
+
+        c_res_col, c_res_alp, c_fac = inline_mix_logic(
+            nodes, links, clip_item.blend_mode, c_eff_opacity, get_effective_visibility(clip_item),
+            c_mask, c_col, c_alp,
+            group_accum_col, group_accum_alp,
+            location=(mix_x, y_loc), parent=c_frame,
+            socket_clip_alpha=clip_mask_socket,
+            layer_id=clip_item.layer_id, opacity_label="* Opacity"
+        )
+
+        group_accum_col = c_res_col
+        group_accum_alp = c_res_alp
+
+        if clip_item.layer_type == 'GROUP':
+            cursor_x = c_end_x + 1000
+        else:
+            cursor_x += 1000
+
+    # 5. Final Mix onto Main Stack
+    final_col, final_alp, final_fac = inline_mix_logic(
+        nodes, links, base_item.blend_mode, 1.0, True,
+        None, group_accum_col, group_accum_alp,
+        current_col, current_alp,
+        location=(cursor_x, y_loc), parent=frame,
+        layer_id=base_item.layer_id, opacity_label="* Group Final Mix"
+    )
+
+    return final_col, final_alp, cursor_x + 1200
+
+
+def build_hierarchy_recursive(nodes, links, props, parent_index, bottom_color_socket, bottom_alpha_socket, x_loc, y_loc):
     children = get_immediate_children(props.layer_list, parent_index)
-
-    # We iterate REVERSE (Bottom-to-Top) for compositing order
     reversed_children = list(reversed(children))
 
     current_col = bottom_color_socket
     current_alp = bottom_alpha_socket
-
     cursor_x = x_loc
 
-    # Iterate through children linearly to handle Clipping Groups
     i = 0
     count = len(reversed_children)
 
     while i < count:
         idx, item = reversed_children[i]
 
-        # Identify Clipping Group
-        # item is the Base Layer (even if it's just a single layer)
-        # Collect consecutive clipping masks above it
-
-        base_item = item
-        base_idx = idx
+        # Collect Clipping
         clipping_layers = []
-
         j = i + 1
         while j < count:
             next_idx, next_item = reversed_children[j]
@@ -266,256 +421,17 @@ def build_hierarchy_recursive(nodes, links, props, parent_index,
             else:
                 break
 
-        # Advance main loop
         i = j
 
-        # --- 1. PROCESS BASE LAYER (Content) ---
-
-        # Create Frame
-        frame = nodes.new('NodeFrame')
-        frame.label = base_item.name
-        frame.use_custom_color = True
-        frame.color = (0.2, 0.3, 0.4) if base_item.layer_type != 'GROUP' else (0.4, 0.3, 0.2)
-        frame.location = (cursor_x, y_loc)
-        if base_item.layer_id > 0: frame["bpsd_layer_id"] = base_item.layer_id
-
-        base_raw_col = None
-        base_raw_alp = None
-        base_mask_socket = None
-
-        # Get Base Content
-        if base_item.layer_type == 'GROUP':
-             is_passthrough = (base_item.blend_mode.lower() == 'passthrough')
-             # For isolated group composition, we start with None (Transparent)
-             g_in_col = None
-             g_in_alp = None
-
-             # Recurse
-             g_res_col, g_res_alp, child_end_x = build_hierarchy_recursive(
-                nodes, links, props, base_idx,
-                g_in_col, g_in_alp,
-                cursor_x + 300, y_loc
-             )
-
-             base_raw_col = g_res_col
-             base_raw_alp = g_res_alp
-
-             if base_raw_col is None:
-                 nodes.remove(frame)
-                 continue
-
-             cursor_x = child_end_x + 200 # Shift for Base processing
-
-             if base_item.has_mask:
-                mask_img = ui_ops.find_loaded_image(props.active_psd_path, base_idx, True, base_item.layer_id)
-                if mask_img:
-                    m_node = nodes.new('ShaderNodeTexImage')
-                    m_node.image = mask_img
-                    m_node.label = "Group Mask"
-                    m_node.location = (cursor_x + 50, y_loc - 300)
-                    m_node.parent = frame
-                    if base_item.layer_id > 0: m_node["bpsd_layer_id"] = base_item.layer_id
-                    if m_node.image: m_node.image.colorspace_settings.name = 'Non-Color'
-                    base_mask_socket = m_node.outputs['Color']
-
-        else:
-            # Layer Content
-            col_img = ui_ops.find_loaded_image(props.active_psd_path, base_idx, False, base_item.layer_id)
-            if col_img:
-                t_node = nodes.new('ShaderNodeTexImage')
-                t_node.image = col_img
-                t_node.label = "Layer Color"
-                t_node.location = (cursor_x + 50, y_loc)
-                t_node.parent = frame
-                if base_item.layer_id > 0: t_node["bpsd_layer_id"] = base_item.layer_id
-                if t_node.image: t_node.image.colorspace_settings.name = 'sRGB'
-                base_raw_col = t_node.outputs['Color']
-                base_raw_alp = t_node.outputs['Alpha']
-            else:
-                # Placeholder
-                rgb = nodes.new('ShaderNodeRGB')
-                rgb.outputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
-                rgb.label = "Placeholder"
-                rgb.location = (cursor_x + 50, y_loc)
-                rgb.parent = frame
-                if base_item.layer_id > 0: rgb["bpsd_layer_id"] = base_item.layer_id
-                base_raw_col = rgb.outputs[0]
-
-                val = nodes.new('ShaderNodeValue')
-                val.outputs[0].default_value = 1.0
-                val.location = (cursor_x + 50, y_loc - 100)
-                val.parent = frame
-                if base_item.layer_id > 0: val["bpsd_layer_id"] = base_item.layer_id
-                base_raw_alp = val.outputs[0]
-
-            if base_item.has_mask:
-                mask_img = ui_ops.find_loaded_image(props.active_psd_path, base_idx, True, base_item.layer_id)
-                if mask_img:
-                    m_node = nodes.new('ShaderNodeTexImage')
-                    m_node.image = mask_img
-                    m_node.label = "Layer Mask"
-                    m_node.location = (cursor_x + 50, y_loc - 300)
-                    m_node.parent = frame
-                    if base_item.layer_id > 0: m_node["bpsd_layer_id"] = base_item.layer_id
-                    if m_node.image: m_node.image.colorspace_settings.name = 'Non-Color'
-                    base_mask_socket = m_node.outputs['Color']
-
-        # --- 2. PREPARE BASE (Isolated Mix) ---
-
-        effective_opacity_base = base_item.opacity
-        if base_item.layer_type not in ['LAYER', 'SMART', 'GROUP']:
-             effective_opacity_base = 0.0
-
-        # This returns the Base content modulated by its own Opacity/Mask/Visibility
-        # Since socket_bot_color is None, it returns (Color, Alpha, Alpha)
-        iso_col, iso_alp, iso_fac = inline_mix_logic(
-            nodes, links, 'NORMAL', effective_opacity_base, get_effective_visibility(base_item),
-            base_mask_socket, base_raw_col, base_raw_alp,
-            None, None, # Isolated
-            location=(cursor_x + 300, y_loc),
-            parent=frame,
-            socket_clip_alpha=None,
-            layer_id=base_item.layer_id,
-            opacity_label="* Opacity"
+        # Process Unit
+        current_col, current_alp, cursor_x = _process_composite_unit(
+            nodes, links, props, item, idx, clipping_layers,
+            current_col, current_alp, cursor_x, y_loc
         )
-
-        # The Factor (Opacity * Mask) of the base layer acts as the clip mask for children
-        clip_mask_socket = iso_fac
-
-        group_accum_col = iso_col
-        group_accum_alp = iso_alp
-
-        cursor_x += 1000
-
-        # --- 3. PROCESS CLIPPED LAYERS ---
-
-        for clip_idx, clip_item in clipping_layers:
-            # Frame for Clip
-            c_frame = nodes.new('NodeFrame')
-            c_frame.label = clip_item.name
-            c_frame.use_custom_color = True
-            c_frame.color = (0.2, 0.3, 0.4) if clip_item.layer_type != 'GROUP' else (0.4, 0.3, 0.2)
-            c_frame.location = (cursor_x, y_loc + 100) # Slight offset
-            if clip_item.layer_id > 0: c_frame["bpsd_layer_id"] = clip_item.layer_id
-
-            clip_raw_col = None
-            clip_raw_alp = None
-            clip_local_mask_socket = None
-
-            # Content
-            if clip_item.layer_type == 'GROUP':
-                 # Recurse
-                 c_g_col, c_g_alp, c_end_x = build_hierarchy_recursive(
-                    nodes, links, props, clip_idx,
-                    None, None,
-                    cursor_x + 300, y_loc + 100
-                 )
-                 clip_raw_col = c_g_col
-                 clip_raw_alp = c_g_alp
-
-                 if clip_raw_col is None:
-                     nodes.remove(c_frame)
-                     continue
-
-                 cursor_x = c_end_x + 200 # Adjust cursor based on group size
-
-                 if clip_item.has_mask:
-                    mask_img = ui_ops.find_loaded_image(props.active_psd_path, clip_idx, True, clip_item.layer_id)
-                    if mask_img:
-                        m_node = nodes.new('ShaderNodeTexImage')
-                        m_node.image = mask_img
-                        m_node.label = "Group Mask"
-                        m_node.location = (cursor_x + 50, y_loc - 200)
-                        m_node.parent = c_frame
-                        if clip_item.layer_id > 0: m_node["bpsd_layer_id"] = clip_item.layer_id
-                        if m_node.image: m_node.image.colorspace_settings.name = 'Non-Color'
-                        clip_local_mask_socket = m_node.outputs['Color']
-            else:
-                 # Layer
-                 col_img = ui_ops.find_loaded_image(props.active_psd_path, clip_idx, False, clip_item.layer_id)
-                 if col_img:
-                    t_node = nodes.new('ShaderNodeTexImage')
-                    t_node.image = col_img
-                    t_node.label = "Layer Color"
-                    t_node.location = (cursor_x + 50, y_loc + 100)
-                    t_node.parent = c_frame
-                    if clip_item.layer_id > 0: t_node["bpsd_layer_id"] = clip_item.layer_id
-                    if t_node.image: t_node.image.colorspace_settings.name = 'sRGB'
-                    clip_raw_col = t_node.outputs['Color']
-                    clip_raw_alp = t_node.outputs['Alpha']
-                 else:
-                    rgb = nodes.new('ShaderNodeRGB')
-                    rgb.outputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
-                    rgb.label = "Placeholder"
-                    rgb.location = (cursor_x + 50, y_loc + 100)
-                    rgb.parent = c_frame
-                    if clip_item.layer_id > 0: rgb["bpsd_layer_id"] = clip_item.layer_id
-                    clip_raw_col = rgb.outputs[0]
-
-                    val = nodes.new('ShaderNodeValue')
-                    val.outputs[0].default_value = 1.0
-                    val.location = (cursor_x + 50, y_loc)
-                    val.parent = c_frame
-                    if clip_item.layer_id > 0: val["bpsd_layer_id"] = clip_item.layer_id
-                    clip_raw_alp = val.outputs[0]
-
-                 if clip_item.has_mask:
-                    mask_img = ui_ops.find_loaded_image(props.active_psd_path, clip_idx, True, clip_item.layer_id)
-                    if mask_img:
-                        m_node = nodes.new('ShaderNodeTexImage')
-                        m_node.image = mask_img
-                        m_node.label = "Layer Mask"
-                        m_node.location = (cursor_x + 50, y_loc - 200)
-                        m_node.parent = c_frame
-                        if clip_item.layer_id > 0: m_node["bpsd_layer_id"] = clip_item.layer_id
-                        if m_node.image: m_node.image.colorspace_settings.name = 'Non-Color'
-                        clip_local_mask_socket = m_node.outputs['Color']
-
-            # Mix Clip (Accumulate)
-            effective_opacity_clip = clip_item.opacity
-            if clip_item.layer_type not in ['LAYER', 'SMART', 'GROUP']:
-                 effective_opacity_clip = 0.0
-
-            c_res_col, c_res_alp, c_fac = inline_mix_logic(
-                nodes, links, clip_item.blend_mode, effective_opacity_clip, get_effective_visibility(clip_item),
-                clip_local_mask_socket, clip_raw_col, clip_raw_alp,
-                group_accum_col, group_accum_alp,
-                location=(cursor_x + 300, y_loc),
-                parent=c_frame,
-                socket_clip_alpha=clip_mask_socket, # The Base Layer's Alpha acts as the Clip Mask
-                layer_id=clip_item.layer_id,
-                opacity_label="* Opacity"
-            )
-
-            group_accum_col = c_res_col
-            group_accum_alp = c_res_alp
-
-            cursor_x += 1000
-
-        # --- 4. FINAL MIX ONTO MAIN STACK ---
-
-        # Mix the accumulated group result (Base + Clips) onto the main stack.
-        # Uses Base Layer's blend mode.
-        # Opacity = 1.0 (Opacity was handled inside the group via iso_fac and clip alphas).
-
-        final_res_col, final_res_alp, final_fac = inline_mix_logic(
-            nodes, links, base_item.blend_mode, 1.0, True,
-            None, group_accum_col, group_accum_alp,
-            current_col, current_alp,
-            location=(cursor_x, y_loc),
-            parent=frame, # Attaches to Base Frame
-            socket_clip_alpha=None,
-            layer_id=base_item.layer_id,
-            opacity_label="* Group Final Mix" # Special label ignored by updater
-        )
-
-        current_col = final_res_col
-        current_alp = final_res_alp
-
-        cursor_x += 1200
 
     return current_col, current_alp, cursor_x
 
+# --- OPERATORS ---
 
 class BPSD_OT_create_psd_nodes(bpy.types.Operator):
     bl_idname = "bpsd.create_psd_nodes"

@@ -1,5 +1,3 @@
-
-// TODO remember xmp, we might not need the meme file
 try {
     var scriptFile = new File($.fileName);
     var scriptFolder = scriptFile.parent;
