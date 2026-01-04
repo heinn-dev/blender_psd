@@ -151,7 +151,11 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         psd_name = psd_name.split("/")[-1]
         layout.box().operator("bpsd.highlight_psd", text=f"{psd_name}", icon='IMAGE_DATA',emboss=False)
         layout.separator()
-        
+
+        row = layout.row(align=True)
+        row.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="Regenerate Nodes")
+        row.operator("bpsd.update_psd_nodes", icon='FILE_REFRESH', text="Update Values")
+
         row = layout.row(align=True)
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
         row.prop(props, "auto_save_on_image_save", text="", icon='CHECKMARK' if props.auto_save_on_image_save else 'CANCEL', toggle=True)
@@ -168,46 +172,47 @@ class BPSD_PT_layer_context(bpy.types.Panel):
     
     @classmethod
     def poll(cls, context):
-        props = context.scene.bpsd_props
-        return props.active_layer_index >= 0 and props.active_layer_path != ""
+        return context.scene.bpsd_props is not None
 
     def draw(self, context):
         layout = self.layout
         props = context.scene.bpsd_props
-        item = props.layer_list[props.active_layer_index]
-        
+
+        has_active_layer = (props.active_layer_index >= 0 and
+                            props.active_layer_index < len(props.layer_list) and
+                            props.active_layer_path != "")
+
         col = layout.column()
         col.operator("bpsd.reload_all", text="Reload All Synced", icon='FILE_REFRESH')
         col.operator("bpsd.clean_orphans", text="Purge Old Layers", icon='TRASH')
-        
-        layout.label(text=f"Selected: {item.name}", icon='PREFERENCES')
-        
+
+        if has_active_layer:
+            item = props.layer_list[props.active_layer_index]
+            layout.label(text=f"Selected: {item.name}", icon='PREFERENCES')
+        else:
+            layout.label(text="Selected: None", icon='PREFERENCES')
+
         box = layout.box()
         box = box.row()
-        
+        box.enabled = has_active_layer
+
         row = box.row()
         op = row.operator("bpsd.load_layer", text="Force Load", icon='TEXTURE')
-        op.layer_path = item.path
-        
+        if has_active_layer:
+            op.layer_path = props.layer_list[props.active_layer_index].path
+
         row = box.row()
         op = row.operator("bpsd.save_layer", text="Force Save", icon='FILE_TICK')
 
-class BPSD_PT_nodes(bpy.types.Panel):
-    bl_label = "Node Operations"
-    bl_idname = "BPSD_PT_nodes"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'BPSD'
-    bl_parent_id = "BPSD_PT_main_panel"
-    bl_options = {"DEFAULT_CLOSED"}
+        layout.separator()
+        layout.label(text="Node Operations")
 
-    def draw(self, context):
-        layout = self.layout
-        layout.operator("bpsd.create_layer_node", icon='NODETREE')
-        layout.operator("bpsd.create_layer_frame", icon='FRAME_PREV')
-        layout.operator("bpsd.create_group_nodes", icon='FILE_FOLDER')
+        col = layout.column()
+        col.enabled = has_active_layer
+        col.operator("bpsd.create_layer_node", icon='NODETREE')
+        col.operator("bpsd.create_layer_frame", icon='FRAME_PREV')
 
-        row = layout.row(align=True)
-        row.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="Regenerate Nodes")
-        row.operator("bpsd.update_psd_nodes", icon='FILE_REFRESH', text="Update Values")
+        col = layout.column()
+        col.operator("bpsd.create_group_nodes", icon='FILE_FOLDER')
+
         

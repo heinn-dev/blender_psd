@@ -152,7 +152,10 @@ class BPSDPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "photoshop_exe_path")
+        
+        # we aren't using it or AHK anymore, hide it but keep in there for now
+        
+        # layout.prop(self, "photoshop_exe_path")
         layout.prop(self, "show_quick_brushes")
         layout.prop(self, "frequent_brushes")
 
@@ -416,7 +419,6 @@ classes = (
     brush_ops.BPSD_OT_toggle_frequent,
     brush_panels.BPSD_PT_quick_brushes,
     panels.BPSD_PT_layer_context,
-    panels.BPSD_PT_nodes,
     node_ops.BPSD_OT_create_layer_node,
     node_ops.BPSD_OT_create_layer_frame,
     node_ops.BPSD_OT_create_group_nodes,

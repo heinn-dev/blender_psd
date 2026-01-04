@@ -158,6 +158,9 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
     # --- COLOR PATH ---
     else:
         planar_data = layer.get_image_data()
+        # use property access directly as per docs to ensure decompression?
+        # DOESN'T WORK, IT IS NOT EXPOSED LIKE THE DOCS SAID!!!
+        # planar_data = layer.image_data
 
         # DEBUG: Investigate White Texture Bug
         if planar_data:

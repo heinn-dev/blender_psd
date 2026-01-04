@@ -299,6 +299,11 @@ def build_hierarchy_recursive(nodes, links, props, parent_index,
 
              base_raw_col = g_res_col
              base_raw_alp = g_res_alp
+
+             if base_raw_col is None:
+                 nodes.remove(frame)
+                 continue
+
              cursor_x = child_end_x + 200 # Shift for Base processing
 
              if base_item.has_mask:
@@ -407,6 +412,11 @@ def build_hierarchy_recursive(nodes, links, props, parent_index,
                  )
                  clip_raw_col = c_g_col
                  clip_raw_alp = c_g_alp
+
+                 if clip_raw_col is None:
+                     nodes.remove(c_frame)
+                     continue
+
                  cursor_x = c_end_x + 200 # Adjust cursor based on group size
 
                  if clip_item.has_mask:
