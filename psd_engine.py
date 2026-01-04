@@ -53,7 +53,8 @@ def read_file(path):
                 "opacity": layer.opacity , # / 255.0 this is accessed as a flat despite being stored as an int internally
                 "children": []
             }
-            print(f"layer {layer_name} has blend mode {node['blend_mode']}, is clipping mask {layer.clipping_mask}")
+            
+            # print(f"layer {layer_name} has blend mode {node['blend_mode']}, is clipping mask {layer.clipping_mask}")
             # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
 
             # if you wanna have a visibility system that's pararrel to PS, probably just move this stuff out from here...
@@ -132,8 +133,9 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
 
     # --- MASK PATH ---
     if fetch_mask:
-        canvas = np.full((target_h, target_w), 255, dtype=np.uint8)
-        
+        mask_bg = getattr(layer, 'mask_default_color', 255)
+        canvas = np.full((target_h, target_w), mask_bg, dtype=np.uint8)
+
         try:
             mask_arr = layer.mask
         except:
