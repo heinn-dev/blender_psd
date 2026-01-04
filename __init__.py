@@ -34,6 +34,18 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     hidden_by_parent: bpy.props.BoolProperty(default=False)# type: ignore
     blend_mode: bpy.props.StringProperty(default="NORMAL")# type: ignore
     opacity: bpy.props.FloatProperty(default=1.0)# type: ignore
+    clip_base_index: bpy.props.IntProperty(default=-1) # type: ignore
+
+    visibility_override: bpy.props.EnumProperty(
+        name="Visibility Override",
+        description="Override the visibility of this layer in the node tree",
+        items=[
+            ('PSD', "Sync (PSD)", "Use visibility from Photoshop"),
+            ('SHOW', "Always Show", "Force visible in Blender"),
+            ('HIDE', "Always Hide", "Force hidden in Blender"),
+        ],
+        default='PSD'
+    ) # type: ignore
 
 
 class BPSD_SceneProperties(bpy.types.PropertyGroup):
@@ -75,6 +87,7 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
 
     #last_known_mtime: bpy.props.FloatProperty(default=0.0) # type: ignore
     last_known_mtime_str: bpy.props.StringProperty(default="0.0") # type: ignore
+    structure_signature: bpy.props.StringProperty() # type: ignore
 
     show_cat_math: bpy.props.BoolProperty(name="Math", default=True)# type: ignore
     show_cat_light: bpy.props.BoolProperty(name="Light", default=True)# type: ignore
@@ -89,38 +102,23 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
         default=False
     )# type: ignore
 
-    # --- HELPER: Dynamic Dropdown Generator ---
     def get_psd_images(self, context):
-        """
-        Scans loaded Blender images for .psd files.
-        Returns a list of tuples: (identifier, display_name, description)
-        """
         items = []
         
-        # 1. Iterate through all loaded images
         for img in bpy.data.images:
-            # Check filename extension (case insensitive)
             if img.filepath.lower().endswith('.psd'):
-                # Identifier must be unique (Image Name), Display is Name, Desc is Path
                 items.append((img.name, img.name, img.filepath))
         
-        # 2. Fallback if empty
         if not items:
             items.append(('NONE', "No Loaded PSDs", "Use Image > Open to load a PSD first"))
             
         return items
 
-    # --- HELPER: Update Handler ---
-    # (Removed to decouple selection from active sync)
-    # def on_psd_selection_update(self, context): ...
-    
     active_psd_image: bpy.props.EnumProperty(
         name="Source PSD",
         description="Select a .psd image currently loaded in Blender",
         items=get_psd_images,
-        # update=on_psd_selection_update  <-- REMOVED to make sync explicit
     )# type: ignore
-    
     
 
 class BPSDPreferences(bpy.types.AddonPreferences):
@@ -199,7 +197,38 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
         # 2. Populate
         props.layer_list.clear()
         self.flatten_tree(tree_data, props.layer_list, indent=0)
-        
+
+        # 3. Resolve Clipping Bases (Iterate Bottom-to-Top)
+        indent_map = {} # Maps indent level -> current base index
+        # We iterate backwards because the list is Top-to-Bottom, but bases are below clipping masks
+        for i in range(len(props.layer_list) - 1, -1, -1):
+            item = props.layer_list[i]
+
+            if item.is_clipping_mask:
+                # This layer is a clipping mask, so it must clip to the current base at this indent
+                if item.indent in indent_map:
+                    item.clip_base_index = indent_map[item.indent]
+            else:
+                # This is a normal layer, so it becomes the new base for this indent level
+                indent_map[item.indent] = i
+
+        # 4. Calculate Structure Signature
+        sig_parts = []
+        for item in props.layer_list:
+            # Include fields that determine node structure
+            # Note: We exclude Name (just a label) and Blend Mode for non-groups (just a value update)
+            # This allows the "Update Nodes" operator to handle these changes without a full regeneration warning.
+
+            # Base topology
+            part = f"{item.layer_id}:{item.layer_type}:{item.indent}:{item.is_clipping_mask}:{item.has_mask}"
+
+            # Groups use blend mode for topology (Passthrough vs Normal)
+            if item.layer_type == 'GROUP':
+                part += f":{item.blend_mode}"
+
+            sig_parts.append(part)
+        props.structure_signature = "|".join(sig_parts)
+
         props.active_layer_index = -1
         props.active_layer_path = ""
         
@@ -216,6 +245,19 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             main_img = bpy.data.images.get(props.active_psd_image)
             if main_img:
                 main_img.reload()
+
+        # 5. Auto-Update Node Tree
+        # Update the node group if it exists (global update), regardless of active object
+        ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+        if ng:
+            stored_sig = ng.get("bpsd_structure_signature", "")
+
+            if stored_sig != props.structure_signature:
+                print("BPSD: Structure changed, regenerating nodes...")
+                bpy.ops.bpsd.create_psd_nodes('EXEC_DEFAULT')
+            else:
+                print("BPSD: Structure match, updating node values...")
+                bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
 
         self.report({'INFO'}, "Connected!")
         return {'FINISHED'}
@@ -363,7 +405,9 @@ classes = (
     ui_ops.BPSD_OT_save_all_layers,
     ui_ops.BPSD_OT_clean_orphans,
     ui_ops.BPSD_OT_reload_all,
-        
+    ui_ops.BPSD_OT_toggle_visibility,
+    ui_ops.BPSD_OT_load_all_layers,
+
     panels.BPSD_PT_main_panel,
     
     brush_ops.BPSD_OT_qb_brush_blend,
@@ -377,6 +421,7 @@ classes = (
     node_ops.BPSD_OT_create_layer_frame,
     node_ops.BPSD_OT_create_group_nodes,
     node_ops.BPSD_OT_create_psd_nodes,
+    node_ops.BPSD_OT_update_psd_nodes,
 )
 
 def register():

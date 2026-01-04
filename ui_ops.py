@@ -564,3 +564,127 @@ class BPSD_OT_reload_all(bpy.types.Operator):
 
         self.report({'INFO'}, f"Reloaded {success_count} layers.")
         return {'FINISHED'}
+
+class BPSD_OT_toggle_visibility(bpy.types.Operator):
+    bl_idname = "bpsd.toggle_visibility"
+    bl_label = "Toggle Visibility"
+    bl_description = "Override visibility (Click to toggle HIDE/SHOW, Shift-Click to reset to PSD)"
+
+    index: bpy.props.IntProperty() # type: ignore
+
+    def invoke(self, context, event):
+        props = context.scene.bpsd_props
+        item = props.layer_list[self.index]
+
+        if event.shift:
+            item.visibility_override = 'PSD'
+        else:
+            # Simple Toggle Logic relative to current effective state
+
+            # If currently syncing (PSD)
+            if item.visibility_override == 'PSD':
+                # If currently visible -> Force Hide
+                if item.is_visible and not item.hidden_by_parent:
+                    item.visibility_override = 'HIDE'
+                # If currently hidden -> Force Show
+                else:
+                    item.visibility_override = 'SHOW'
+
+            # If currently Force Hiding -> Force Show
+            elif item.visibility_override == 'HIDE':
+                 item.visibility_override = 'SHOW'
+
+            # If currently Force Showing -> Force Hide
+            elif item.visibility_override == 'SHOW':
+                 item.visibility_override = 'HIDE'
+
+        # Trigger node update to reflect visibility changes immediately
+        try:
+            bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        except Exception:
+            # If the node group doesn't exist or operator fails, we just ignore it
+            pass
+
+        return {'FINISHED'}
+
+
+class BPSD_OT_load_all_layers(bpy.types.Operator):
+    bl_idname = "bpsd.load_all_layers"
+    bl_label = "Load All Layers"
+    bl_description = "Load textures for all layers in the list"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+        active_psd = props.active_psd_path
+
+        requests = []
+
+        # Identify which layers need loading
+        for i, item in enumerate(props.layer_list):
+            if item.layer_type in ["GROUP", "ADJUSTMENT", "UNKNOWN"]:
+                continue
+
+            # Color
+            requests.append({
+                'layer_path': item.path,
+                'layer_index': i,
+                'width': props.psd_width,
+                'height': props.psd_height,
+                'is_mask': False,
+                'layer_id': item.layer_id
+            })
+
+            # Mask
+            if item.has_mask:
+                 requests.append({
+                    'layer_path': item.path,
+                    'layer_index': i,
+                    'width': props.psd_width,
+                    'height': props.psd_height,
+                    'is_mask': True,
+                    'layer_id': item.layer_id
+                })
+
+        if not requests:
+            self.report({'INFO'}, "No layers to load.")
+            return {'CANCELLED'}
+
+        self.report({'INFO'}, f"Loading {len(requests)} textures...")
+        results = psd_engine.read_all_layers(active_psd, requests)
+
+        count = 0
+        psd_name = os.path.basename(active_psd)
+
+        for (idx, is_mask), pixels in results.items():
+            # Create or Get Image
+            if idx >= len(props.layer_list): continue
+            item = props.layer_list[idx]
+
+            # Naming convention from load_layer
+            display_name = item.name
+            layer_name = f"{psd_name}/{idx:03d}_{display_name}"
+            img_name = f"{layer_name}_MASK" if is_mask else layer_name
+
+            img = bpy.data.images.get(img_name)
+            if not img:
+                 img = bpy.data.images.new(img_name, width=props.psd_width, height=props.psd_height, alpha=True)
+
+            # Resize if needed
+            if img.size[0] != props.psd_width or img.size[1] != props.psd_height:
+                img.scale(props.psd_width, props.psd_height)
+
+            if len(pixels) > 0:
+                img.pixels.foreach_set(pixels)
+
+            # Tag it
+            tag_image(img, active_psd, item.path, idx, is_mask, item.layer_id)
+            img.pack()
+
+            # Colorspace
+            img.colorspace_settings.name = 'Non-Color' if is_mask else 'sRGB'
+
+            count += 1
+
+        self.report({'INFO'}, f"Loaded {count} images.")
+        return {'FINISHED'}

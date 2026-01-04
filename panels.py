@@ -76,6 +76,8 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row = split.row(align=True)
             vis_row = split.row(align=True)
             vis_row.alignment = 'RIGHT'
+            if item.visibility_override != 'PSD':
+                vis_row.alert = True
             
 
             is_active_row = (i == props.active_layer_index)
@@ -93,17 +95,21 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             else:
                 icon = 'IMAGE_DATA'
             
+            effective_vis = item.is_visible
+            if item.visibility_override == 'SHOW': effective_vis = True
+            elif item.visibility_override == 'HIDE': effective_vis = False
+
             if item.hidden_by_parent:
                 eye = "KEYFRAME"
             else:
-                eye = "LAYER_ACTIVE" if item.is_visible else "LAYER_USED"
-                
+                eye = "LAYER_ACTIVE" if effective_vis else "LAYER_USED"
+
             row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
             row.alignment = 'LEFT'
-            
+
             if item.is_clipping_mask:
                 row.label(text='', icon = 'TRACKING_FORWARDS')
-            
+
             if item.layer_type in {"GROUP", "SMART", "ADJUSTMENT", "UNKNOWN"}:
                 # row.label(text=item.name, icon=icon)
                 layer_sub = row.row(align=True)
@@ -135,8 +141,9 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             if item.layer_type == "GROUP":
                 layout_stack.append(current_layout)
                 current_indent += 1
-            
-            vis_row.label(text="", icon=eye)
+
+            op = vis_row.operator("bpsd.toggle_visibility", text="", icon=eye, emboss=False)
+            op.index = i
                 
             
     
@@ -199,5 +206,8 @@ class BPSD_PT_nodes(bpy.types.Panel):
         layout.operator("bpsd.create_layer_node", icon='NODETREE')
         layout.operator("bpsd.create_layer_frame", icon='FRAME_PREV')
         layout.operator("bpsd.create_group_nodes", icon='FILE_FOLDER')
-        layout.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="Create PSD Output")
+
+        row = layout.row(align=True)
+        row.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="Regenerate Nodes")
+        row.operator("bpsd.update_psd_nodes", icon='FILE_REFRESH', text="Update Values")
         

@@ -53,7 +53,7 @@ def read_file(path):
                 "opacity": layer.opacity , # / 255.0 this is accessed as a flat despite being stored as an int internally
                 "children": []
             }
-            print(f"layer {layer_name} has blend mode {node['blend_mode']}")
+            print(f"layer {layer_name} has blend mode {node['blend_mode']}, is clipping mask {layer.clipping_mask}")
             # print(f"loaded {layer_name}, it is a {layer_type} layer, has mask : {has_mask}")
 
             # if you wanna have a visibility system that's pararrel to PS, probably just move this stuff out from here...
