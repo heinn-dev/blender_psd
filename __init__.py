@@ -85,6 +85,13 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
         default=False
     ) # type: ignore
 
+    use_closest_interpolation: bpy.props.BoolProperty(
+        name="Pixel Art Mode",
+        description="Use Closest interpolation for crisp pixels",
+        default=False,
+        update=node_ops.update_interpolation_callback
+    ) # type: ignore
+
     last_known_mtime_str: bpy.props.StringProperty(default="0.0") # type: ignore
     structure_signature: bpy.props.StringProperty() # type: ignore
 

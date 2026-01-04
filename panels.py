@@ -171,8 +171,12 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         layout.separator()
 
         row = layout.row(align=True)
-        row.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="PSD Nodes")
-        row.operator("bpsd.update_psd_nodes", icon='FILE_REFRESH', text="Update Nodes")
+        row.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="Regenerate Nodes")
+        row.operator("bpsd.update_psd_nodes", icon='FILE_REFRESH', text="Update Values")
+
+        # Interpolation Toggle
+        icon_interp = 'ALIASED' if props.use_closest_interpolation else 'ANTIALIASED'
+        row.prop(props, "use_closest_interpolation", text="", icon=icon_interp, toggle=True)
 
         row = layout.row(align=True)
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')

@@ -101,7 +101,37 @@ def focus_image_editor(context, image):
         
     ts = bpy.context.tool_settings.image_paint
     if ts.mode == "IMAGE":
-        ts.canvas = image 
+        ts.canvas = image
+    elif ts.mode == "MATERIAL":
+        # In Material mode, we must set the active node in the shader editor
+        obj = context.active_object
+        if obj and obj.active_material and obj.active_material.use_nodes:
+            mat = obj.active_material
+            nodes = mat.node_tree.nodes
+
+            # Find the node that uses this image
+            target_node = None
+            target_tree = nodes # Default to root
+
+            # 1. Search Root
+            for node in nodes:
+                if node.type == 'TEX_IMAGE' and node.image == image:
+                    target_node = node
+                    break
+
+            # 2. Search inside the BPSD Node Group
+            if not target_node:
+                ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+                if ng:
+                    for node in ng.nodes:
+                        if node.type == 'TEX_IMAGE' and node.image == image:
+                            target_node = node
+                            target_tree = ng.nodes
+                            break
+
+            if target_node:
+                target_tree.active = target_node
+                target_node.select = True 
         
 
 def run_photoshop_refresh(target_psd_path):

@@ -69,12 +69,72 @@ def get_immediate_children(layer_list, parent_index):
 
     return children
 
+def combine_masks(nodes, links, mask1, mask2, x, y, parent=None, layer_id=0):
+    """
+    Combines two mask sockets (Multiply). Handles None.
+    Returns result_socket.
+    """
+    if not mask1 and not mask2:
+        return None
+    if mask1 and not mask2:
+        return mask1
+    if not mask1 and mask2:
+        return mask2
+
+    # Both exist
+    mul = nodes.new('ShaderNodeMath')
+    mul.operation = 'MULTIPLY'
+    mul.label = "Mask Combine"
+    mul.location = (x, y)
+    if parent: mul.parent = parent
+    if layer_id > 0: mul["bpsd_layer_id"] = layer_id
+
+    links.new(mask1, mul.inputs[0])
+    links.new(mask2, mul.inputs[1])
+
+    return mul.outputs[0]
+
+def combine_opacity(nodes, links, opacity_socket, item_opacity, x, y, parent=None, layer_id=0):
+    """
+    Combines an inherited opacity socket with the item's float opacity.
+    Returns result_socket.
+    """
+    # Create value for item opacity
+    # We could just use the math node input default, but to return a socket we use a node or just rely on downstream
+    # Better: If we have an upstream socket, we multiply. If not, we don't need a socket,
+    # but the downstream logic expects a socket if we want to pass it recursively.
+
+    val = nodes.new('ShaderNodeValue')
+    val.outputs[0].default_value = item_opacity
+    val.label = "Group Opacity"
+    val.location = (x, y)
+    if parent: val.parent = parent
+    if layer_id > 0: val["bpsd_layer_id"] = layer_id
+
+    item_sock = val.outputs[0]
+
+    if not opacity_socket:
+        return item_sock
+
+    mul = nodes.new('ShaderNodeMath')
+    mul.operation = 'MULTIPLY'
+    mul.label = "Opacity Combine"
+    mul.location = (x + 150, y)
+    if parent: mul.parent = parent
+    if layer_id > 0: mul["bpsd_layer_id"] = layer_id
+
+    links.new(opacity_socket, mul.inputs[0])
+    links.new(item_sock, mul.inputs[1])
+
+    return mul.outputs[0]
+
 def inline_mix_logic(nodes, links, blend_mode, opacity, is_visible,
                      socket_mask, socket_layer_color, socket_layer_alpha,
                      socket_bot_color, socket_bot_alpha,
                      location=(0,0), parent=None,
                      socket_clip_alpha=None, layer_id=0,
-                     opacity_label="* Opacity"):
+                     opacity_label="* Opacity",
+                     socket_inherited_opacity=None):
     """
     Generates the mixing nodes directly into the tree (No groups).
     Returns (out_color_socket, out_alpha_socket, fac_socket).
@@ -136,7 +196,23 @@ def inline_mix_logic(nodes, links, blend_mode, opacity, is_visible,
     eff_opacity = opacity * (1.0 if is_visible else 0.0)
     mul_2.inputs[1].default_value = eff_opacity
 
-    fac_socket = mul_2.outputs[0]
+    prev_socket = mul_2.outputs[0]
+
+    # Mul 3: Result * Inherited Opacity
+    if socket_inherited_opacity:
+        mul_3 = nodes.new('ShaderNodeMath')
+        mul_3.operation = 'MULTIPLY'
+        mul_3.label = "* Inherited Opacity"
+        mul_3.location = (x + 350, y)
+        set_id(mul_3)
+        if parent: mul_3.parent = parent
+
+        links.new(prev_socket, mul_3.inputs[0])
+        links.new(socket_inherited_opacity, mul_3.inputs[1])
+        prev_socket = mul_3.outputs[0]
+        x += 150
+
+    fac_socket = prev_socket
 
     # --- IF FIRST LAYER (No Bottom) ---
     if socket_bot_color is None:
@@ -213,12 +289,25 @@ def inline_mix_logic(nodes, links, blend_mode, opacity, is_visible,
 
 # --- HIERARCHY HELPERS ---
 
+def get_interpolation_mode(props):
+    return 'Closest' if props.use_closest_interpolation else 'Linear'
+
+def update_interpolation_callback(self, context):
+    bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+
 def _get_socket_from_image(nodes, image, label, x, y, parent=None, layer_id=0):
     if not image: return None, None
     t_node = nodes.new('ShaderNodeTexImage')
     t_node.image = image
     t_node.label = label
     t_node.location = (x, y)
+
+    # Set interpolation based on scene property
+    if bpy.context and bpy.context.scene:
+        props = bpy.context.scene.bpsd_props
+        if props:
+             t_node.interpolation = get_interpolation_mode(props)
+
     if parent: t_node.parent = parent
     if layer_id > 0: t_node["bpsd_layer_id"] = layer_id
 
@@ -275,7 +364,9 @@ def _create_item_frame(nodes, item, x, y):
     if item.layer_id > 0: frame["bpsd_layer_id"] = item.layer_id
     return frame
 
-def _resolve_item_content(nodes, links, props, item, index, x, y, frame):
+def _resolve_item_content(nodes, links, props, item, index, x, y, frame,
+                          background_col=None, background_alp=None,
+                          inherited_mask=None, inherited_opacity_socket=None):
     """
     Returns (col, alp, mask, next_x)
     Unified fetcher for both Group (recursive) and Layer content.
@@ -284,20 +375,55 @@ def _resolve_item_content(nodes, links, props, item, index, x, y, frame):
     next_x = x
 
     if item.layer_type == 'GROUP':
+        # Check Blend Mode for PassThrough
+        is_passthrough = (item.blend_mode == 'PASSTHROUGH')
+
+        # Prepare Context for Recursion
+        rec_bg_col = background_col if is_passthrough else None
+        rec_bg_alp = background_alp if is_passthrough else None
+
+        rec_inherited_mask = None
+        rec_inherited_opacity = None
+
+        # Group Mask
+        group_mask_socket = None
+        if item.has_mask:
+            mask_img = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
+            if mask_img:
+                group_mask_socket, _ = _get_socket_from_image(nodes, mask_img, "Group Mask", x + 50, y - 300, frame, item.layer_id)
+
+        # PassThrough Logic: Combine Masks/Opacity to pass down
+        if is_passthrough:
+            rec_inherited_mask = combine_masks(nodes, links, inherited_mask, group_mask_socket, x + 200, y - 400, frame, item.layer_id)
+
+            # Opacity
+            # If PassThrough, opacity affects children.
+            eff_opacity = item.opacity if item.is_visible else 0.0
+            # Note: Visibility is usually handled in mix logic, but for PT recursion we must check it here
+            # or rely on individual children visibility.
+            # However, if group is hidden, all children should be hidden.
+            # We can zero out the opacity passed down.
+            if not get_effective_visibility(item):
+                eff_opacity = 0.0
+
+            rec_inherited_opacity = combine_opacity(nodes, links, inherited_opacity_socket, eff_opacity, x + 200, y - 500, frame, item.layer_id)
+        else:
+            # Normal Group:
+            # We treat it as isolated. We do NOT pass down inherited masks/opacity/background.
+            # BUT we return the group_mask_socket so the caller can use it for the group mix.
+            mask = group_mask_socket
+
         # Recurse
         col, alp, child_end_x = build_hierarchy_recursive(
             nodes, links, props, index,
-            None, None,
-            x + 300, y
+            rec_bg_col, rec_bg_alp,
+            x + 300, y,
+            inherited_mask=rec_inherited_mask,
+            inherited_opacity_socket=rec_inherited_opacity
         )
         # For groups, we advance past the children
         next_x = child_end_x + 200
 
-        # Group Mask
-        if item.has_mask:
-            mask_img = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
-            if mask_img:
-                mask, _ = _get_socket_from_image(nodes, mask_img, "Group Mask", next_x + 50, y - 300, frame, item.layer_id)
     else:
         # Layer Content
         col, alp, mask = _get_layer_content(nodes, links, props, item, index, x, y, frame)
@@ -305,7 +431,8 @@ def _resolve_item_content(nodes, links, props, item, index, x, y, frame):
 
     return col, alp, mask, next_x
 
-def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_layers, current_col, current_alp, x_loc, y_loc):
+def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_layers, current_col, current_alp, x_loc, y_loc,
+                            inherited_mask=None, inherited_opacity_socket=None):
     """
     Handles one base layer + its clipping masks.
     Returns (out_col, out_alp, next_x)
@@ -316,26 +443,52 @@ def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_l
     frame = _create_item_frame(nodes, base_item, cursor_x, y_loc)
 
     # 2. Get Base Content
+    # We pass inherited context.
+    # If it's a Layer, it ignores them (handles mix later).
+    # If it's a PassThrough Group, it uses them.
+    # If it's a Normal Group, it ignores them (restarts stack).
     base_col, base_alp, base_mask, content_end_x = _resolve_item_content(
-        nodes, links, props, base_item, base_idx, cursor_x, y_loc, frame
+        nodes, links, props, base_item, base_idx, cursor_x, y_loc, frame,
+        background_col=current_col, background_alp=current_alp,
+        inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket
     )
 
-    # Handle Empty Groups
+    # Handle Empty Groups / PassThrough Return
     if base_item.layer_type == 'GROUP':
+        # If PassThrough, the recursion already handled the mixing onto current_col
+        if base_item.blend_mode == 'PASSTHROUGH':
+             # The result (base_col) IS the updated stack.
+             if base_col is None:
+                 # Should not happen if current_col was passed in, unless group is empty?
+                 # If empty group, base_col might be current_col or None if logic failed
+                 pass
+
+             # We can remove the frame if we want, or keep it for structure
+             # But we MUST update cursor and return
+             cursor_x = content_end_x
+             return base_col, base_alp, cursor_x
+
         if base_col is None:
             nodes.remove(frame)
             return current_col, current_alp, cursor_x
         cursor_x = content_end_x
 
     # 3. Prepare Base (Isolated Mix)
+
+    # Calculate Effective Mask (Self + Inherited)
+    # Note: For Normal Groups, inherited_mask applies here (Group Mix).
+    #       For Layers, inherited_mask applies here.
+    eff_base_mask = combine_masks(nodes, links, inherited_mask, base_mask, cursor_x + 100, y_loc, frame, base_item.layer_id)
+
     eff_opacity = base_item.opacity if base_item.layer_type in ['LAYER', 'SMART', 'GROUP'] else 0.0
 
     iso_col, iso_alp, iso_fac = inline_mix_logic(
         nodes, links, 'NORMAL', eff_opacity, get_effective_visibility(base_item),
-        base_mask, base_col, base_alp,
+        eff_base_mask, base_col, base_alp,
         None, None,
         location=(cursor_x + 300, y_loc), parent=frame,
-        layer_id=base_item.layer_id, opacity_label="* Opacity"
+        layer_id=base_item.layer_id, opacity_label="* Opacity",
+        socket_inherited_opacity=inherited_opacity_socket
     )
 
     clip_mask_socket = iso_fac
@@ -350,8 +503,14 @@ def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_l
         # Create small frame for clip
         c_frame = _create_item_frame(nodes, clip_item, cursor_x, y_loc + 100)
 
+        # Clipping layers currently don't support PassThrough recursion in this logic (rare case?)
+        # Standard resolution:
         c_col, c_alp, c_mask, c_end_x = _resolve_item_content(
-            nodes, links, props, clip_item, clip_idx, cursor_x, y_loc + 100, c_frame
+            nodes, links, props, clip_item, clip_idx, cursor_x, y_loc + 100, c_frame,
+            # Clipping layers inside a PT group must also respect inherited mask/opacity?
+            # Yes, they are part of the group's content.
+            inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket
+            # Note: We do NOT pass background_col because clips don't mix onto background directly
         )
 
         if clip_item.layer_type == 'GROUP':
@@ -367,13 +526,17 @@ def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_l
         # Mix Clip
         c_eff_opacity = clip_item.opacity if clip_item.layer_type in ['LAYER', 'SMART', 'GROUP'] else 0.0
 
+        # Effective Mask for Clip
+        c_eff_mask = combine_masks(nodes, links, inherited_mask, c_mask, mix_x - 100, y_loc + 200, c_frame, clip_item.layer_id)
+
         c_res_col, c_res_alp, c_fac = inline_mix_logic(
             nodes, links, clip_item.blend_mode, c_eff_opacity, get_effective_visibility(clip_item),
-            c_mask, c_col, c_alp,
+            c_eff_mask, c_col, c_alp,
             group_accum_col, group_accum_alp,
             location=(mix_x, y_loc), parent=c_frame,
             socket_clip_alpha=clip_mask_socket,
-            layer_id=clip_item.layer_id, opacity_label="* Opacity"
+            layer_id=clip_item.layer_id, opacity_label="* Opacity",
+            socket_inherited_opacity=inherited_opacity_socket
         )
 
         group_accum_col = c_res_col
@@ -396,7 +559,8 @@ def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_l
     return final_col, final_alp, cursor_x + 1200
 
 
-def build_hierarchy_recursive(nodes, links, props, parent_index, bottom_color_socket, bottom_alpha_socket, x_loc, y_loc):
+def build_hierarchy_recursive(nodes, links, props, parent_index, bottom_color_socket, bottom_alpha_socket, x_loc, y_loc,
+                              inherited_mask=None, inherited_opacity_socket=None):
     children = get_immediate_children(props.layer_list, parent_index)
     reversed_children = list(reversed(children))
 
@@ -426,7 +590,8 @@ def build_hierarchy_recursive(nodes, links, props, parent_index, bottom_color_so
         # Process Unit
         current_col, current_alp, cursor_x = _process_composite_unit(
             nodes, links, props, item, idx, clipping_layers,
-            current_col, current_alp, cursor_x, y_loc
+            current_col, current_alp, cursor_x, y_loc,
+            inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket
         )
 
     return current_col, current_alp, cursor_x
@@ -633,8 +798,16 @@ class BPSD_OT_update_psd_nodes(bpy.types.Operator):
         # 2. Iterate Layers and Update Nodes
         layer_map = {item.layer_id: item for item in props.layer_list if item.layer_id > 0}
 
+        target_interp = get_interpolation_mode(props)
+
         count = 0
         for node in ng.nodes:
+            # Update Interpolation on all Texture Nodes managed by us
+            if node.type == 'TEX_IMAGE':
+                 if node.interpolation != target_interp:
+                     node.interpolation = target_interp
+                     count += 1
+
             lid = node.get("bpsd_layer_id", 0)
             if lid > 0 and lid in layer_map:
                 item = layer_map[lid]
@@ -650,6 +823,13 @@ class BPSD_OT_update_psd_nodes(bpy.types.Operator):
                      eff_opacity = item.opacity * (1.0 if get_effective_visibility(item) else 0.0)
                      if node.inputs[1].default_value != eff_opacity:
                         node.inputs[1].default_value = eff_opacity
+                        count += 1
+
+                # Update Group Opacity (PassThrough / Inherited)
+                if node.type == 'VALUE' and node.label == "Group Opacity":
+                     eff_opacity = item.opacity * (1.0 if get_effective_visibility(item) else 0.0)
+                     if node.outputs[0].default_value != eff_opacity:
+                        node.outputs[0].default_value = eff_opacity
                         count += 1
 
                 # Update Blend Mode
