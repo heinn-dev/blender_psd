@@ -7,8 +7,6 @@ from . import psd_engine
 import subprocess
 import time
 
-# --- CACHE & WATCHER ---
-
 class BPSD_RuntimeState:
     _instance = None
 
@@ -27,13 +25,10 @@ class BPSD_RuntimeState:
     def set_dirty(self, image_name, is_dirty):
         self.dirty_cache[image_name] = is_dirty
 
-# Global singleton instance
 runtime_state = BPSD_RuntimeState()
 
 def init_dirty_cache():
     runtime_state.clear()
-    # for img in bpy.data.images:
-        # runtime_state.set_dirty(img.name, img.is_dirty)
 
 def image_dirty_watcher():
     context = bpy.context
@@ -51,7 +46,6 @@ def image_dirty_watcher():
         was_dirty = runtime_state.get_dirty(img.name)
         runtime_state.set_dirty(img.name, current_dirty)
 
-        # Transition: Dirty -> Clean (User Saved)
         if was_dirty and not current_dirty:
             if props.auto_save_on_image_save:
                 images_to_save.append(img.name)
@@ -59,7 +53,6 @@ def image_dirty_watcher():
     if images_to_save:
         def trigger_saves():
             for name in images_to_save:
-                # print(f"BPSD: Detected save on {name}, syncing to PSD...")
                 try:
                     bpy.ops.bpsd.save_layer('EXEC_DEFAULT', image_name=name)
                 except Exception as e:
@@ -69,7 +62,6 @@ def image_dirty_watcher():
 
     return 1
 
-# --- HELPER ---
 def tag_image(image, psd_path, layer_path, layer_index, is_mask=False, layer_id=0):
     image["psd_path"] = psd_path
     image["psd_layer_path"] = layer_path
@@ -83,12 +75,9 @@ def find_loaded_image(psd_path, layer_index, is_mask, layer_id=0):
         if img.get("psd_path") != psd_path: continue
         if img.get("psd_is_mask", False) != is_mask: continue
 
-        # 1. Try ID Match
-        # if layer_id > 0:
         if img.get("psd_layer_id") == layer_id:
             return img
 
-        # 2. Fallback to Index
         elif img.get("psd_layer_index") == layer_index:
             return img
 
@@ -99,28 +88,24 @@ def focus_image_editor(context, image):
         if area.type == 'IMAGE_EDITOR':
             area.spaces.active.image = image
             break
-        
+
     ts = bpy.context.tool_settings.image_paint
     if ts.mode == "IMAGE":
         ts.canvas = image
     elif ts.mode == "MATERIAL":
-        # In Material mode, we must set the active node in the shader editor
         obj = context.active_object
         if obj and obj.active_material and obj.active_material.use_nodes:
             mat = obj.active_material
             nodes = mat.node_tree.nodes
 
-            # Find the node that uses this image
             target_node = None
-            target_tree = nodes # Default to root
+            target_tree = nodes
 
-            # 1. Search Root
             for node in nodes:
                 if node.type == 'TEX_IMAGE' and node.image == image:
                     target_node = node
                     break
 
-            # 2. Search inside the BPSD Node Group
             if not target_node:
                 ng = bpy.data.node_groups.get("BPSD_PSD_Output")
                 if ng:
@@ -132,8 +117,8 @@ def focus_image_editor(context, image):
 
             if target_node:
                 target_tree.active = target_node
-                target_node.select = True 
-        
+                target_node.select = True
+
 
 def run_photoshop_refresh(target_psd_path):
     current_dir = os.path.join(os.path.dirname(__file__), "interop")
@@ -146,7 +131,6 @@ def run_photoshop_refresh(target_psd_path):
         print(f"BPSD Error: {e}")
         return
 
-    # 2. Select Runner based on OS
     if sys.platform == 'win32':
         runner = os.path.join(current_dir, "silent_runner.vbs")
         jsx_script = os.path.join(current_dir, "refresh.jsx")
@@ -155,13 +139,8 @@ def run_photoshop_refresh(target_psd_path):
             subprocess.Popen(["wscript", runner, jsx_script])
 
     elif sys.platform == 'darwin':
-        # --- MACOS (AppleScript / osascript) ---
-        # Note: Mac doesn't need the intermediate runner file as much,
-        # but to keep parity we can use 'osascript' to run a line of code.
-
         jsx_script = os.path.join(current_dir, "refresh.jsx")
 
-        # AppleScript command to run the JSX file without activating the app
         cmd = f'tell application id "com.adobe.Photoshop" to do javascript file "{jsx_script}"'
         subprocess.Popen(["osascript", "-e", cmd])
 
@@ -176,8 +155,6 @@ def is_photoshop_file_unsaved(target_psd_path):
             vbs_checker = os.path.join(current_dir, "check_status.vbs")
             if not os.path.exists(vbs_checker): return None
 
-            # Run VBS and capture output
-            # cscript.exe runs in console mode (allowing stdout capture)
             result = subprocess.check_output(
                 ["cscript", "//Nologo", vbs_checker, target_psd_path],
                 encoding='utf-8'
@@ -195,23 +172,21 @@ def is_photoshop_file_unsaved(target_psd_path):
             return "true" in result.lower()
 
     except Exception:
-        # If Photoshop isn't running or script fails, assume safe to proceed
         return False
 
     return False
 
 
-# --- SELECTION OPERATOR ---
 class BPSD_OT_select_layer(bpy.types.Operator):
     bl_idname = "bpsd.select_layer"
     bl_label = "Select Layer"
     bl_description = "Select layer and show it in the Image Editor"
     bl_options = {'INTERNAL'}
 
-    index: bpy.props.IntProperty()# type: ignore
-    path: bpy.props.StringProperty()# type: ignore
-    is_mask : bpy.props.BoolProperty()# type: ignore
-    layer_id: bpy.props.IntProperty(default=0)# type: ignore
+    index: bpy.props.IntProperty() # type: ignore
+    path: bpy.props.StringProperty() # type: ignore
+    is_mask : bpy.props.BoolProperty() # type: ignore
+    layer_id: bpy.props.IntProperty(default=0) # type: ignore
 
     def execute(self, context):
         props = context.scene.bpsd_props
@@ -231,62 +206,47 @@ class BPSD_OT_select_layer(bpy.types.Operator):
                 layer_path=self.path,
                 layer_id=self.layer_id
             )
-            # Note: The load_layer op handles the focusing itself upon completion.
 
         return {'FINISHED'}
 
 
-# --- LOAD OPERATOR ---
 class BPSD_OT_load_layer(bpy.types.Operator):
     bl_idname = "bpsd.load_layer"
     bl_label = "Load Layer"
     bl_description = "Load this PSD layer into a Blender Image"
     bl_options = {'REGISTER', 'UNDO'}
 
-    layer_path: bpy.props.StringProperty()  # type: ignore
-    layer_id: bpy.props.IntProperty(default=0)  # type: ignore
+    layer_path: bpy.props.StringProperty() # type: ignore
+    layer_id: bpy.props.IntProperty(default=0) # type: ignore
 
     def execute(self, context):
-        # 1. Resolve Data
         props = context.scene.bpsd_props
         psd_path = props.active_psd_path
         is_mask = props.active_is_mask
 
-        # If no path arg provided, use selected layer
         target_layer = self.layer_path if self.layer_path else props.active_layer_path
-        # Note: If called without args, self.layer_id defaults to 0.
-        # But usually we call it via select_layer which passes it.
-        # If manual call, we might miss ID, but that falls back to path.
 
         if not psd_path or not target_layer:
             self.report({'ERROR'}, "No layer selected.")
             return {'CANCELLED'}
 
-        # 2. Call Engine
         pixels, w, h = psd_engine.read_layer(psd_path, target_layer, props.psd_width, props.psd_height, fetch_mask=is_mask, layer_id=self.layer_id)
 
-        # in photoshop, empty layers have zero pixels
         if pixels is None:
             self.report({'ERROR'}, "Failed to read layer.")
             return {'CANCELLED'}
 
-        # 3. Create or Find Image
         layer_idx = props.active_layer_index
         img = find_loaded_image(psd_path, layer_idx, is_mask, self.layer_id)
 
         if not img:
-            # Include layer index to disambiguate layers with identical names
             psd_name = props.active_psd_path.replace("\\", "/")
             psd_name = psd_name.split("/")[-1]
 
-            # Get display name from layer list (target_layer is now an index path like "0/2")
             display_name = props.layer_list[layer_idx].name if layer_idx < len(props.layer_list) else target_layer
             layer_name = f"{psd_name}/{layer_idx:03d}_{display_name}"
             img_name = f"{layer_name}_MASK" if is_mask else layer_name
 
-            # If find_loaded_image didn't return anything, we must create a new one.
-            # Do NOT reuse an existing image by name (it might belong to a different PSD
-            # with the same filename). Blender will handle name uniqueness (e.g. .001).
             img = bpy.data.images.new(img_name, width=w, height=h, alpha=True)
 
         if img.size[0] != w or img.size[1] != h:
@@ -298,34 +258,24 @@ class BPSD_OT_load_layer(bpy.types.Operator):
         tag_image(img, psd_path, target_layer, layer_idx, is_mask, self.layer_id)
         img.pack()
 
-        # Colorspace
         img.colorspace_settings.name = 'Non-Color' if is_mask else 'sRGB'
 
-        # 4. View It
         focus_image_editor(context, img)
         self.report({'INFO'}, f"Loaded: {img_name}")
         return {'FINISHED'}
 
 
-# --- SAVE HELPER ---
 def perform_save_images(context, psd_path, images):
-    """
-    Shared logic to save a list of Blender images back to a PSD file.
-    Returns (status_set, message_string).
-    """
     props = context.scene.bpsd_props
 
     updates = []
     valid_images = []
 
     for img in images:
-        # Basic validation
         layer_path = img.get("psd_layer_path")
         is_mask = img.get("psd_is_mask", False)
         layer_id = img.get("psd_layer_id", 0)
 
-        # If passed via save_layer (single), we might have loose requirements,
-        # but generally we need a layer path.
         if not layer_path:
             continue
 
@@ -342,18 +292,12 @@ def perform_save_images(context, psd_path, images):
     if not updates:
         return {'CANCELLED'}, "No valid images to save."
 
-    # Determine Canvas Size from the first valid image
-    # This ensures that even if props are out of sync, we match the actual image data we are sending.
-    # This preserves the behavior of the original save_layer which used img.size.
     canvas_w = updates[0]['width']
     canvas_h = updates[0]['height']
 
-    # Perform the write
-    # We use the inferred canvas size from the images to prevent reshape errors.
     success = psd_engine.write_all_layers(psd_path, updates, canvas_w, canvas_h)
 
     if success:
-        # Pack and update cache
         for img in valid_images:
             try:
                 img.pack()
@@ -361,17 +305,13 @@ def perform_save_images(context, psd_path, images):
             except Exception as e:
                 print(f"Error packing {img.name}: {e}")
 
-        # Photoshop Refresh
         msg = "Saved to disk."
         status = {'FINISHED'}
 
         if props.auto_refresh_ps:
-            # check if we are saving to the active PSD to run the refresh
-            # (If saving an image from another PSD, we might not want to refresh the active one?
-            #  But usually we only work on one.)
             if is_photoshop_file_unsaved(psd_path):
                 msg = "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS)."
-                status = {'WARNING'} # Or just INFO with warning msg
+                status = {'WARNING'}
             else:
                 run_photoshop_refresh(psd_path)
                 msg = "Saved & Refreshed Photoshop."
@@ -381,24 +321,20 @@ def perform_save_images(context, psd_path, images):
     return {'CANCELLED'}, "Write failed."
 
 
-# --- SAVE OPERATOR ---
 class BPSD_OT_save_layer(bpy.types.Operator):
     bl_idname = "bpsd.save_layer"
     bl_label = "Save Layer"
     bl_description = "Write to PSD"
     bl_options = {'REGISTER'}
 
-    # Optional overrides
-    layer_path: bpy.props.StringProperty()# type: ignore
-    image_name: bpy.props.StringProperty()# type: ignore
+    layer_path: bpy.props.StringProperty() # type: ignore
+    image_name: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
-        # Try to find image to save
         img = None
         if self.image_name:
             img = bpy.data.images.get(self.image_name)
         else:
-            # Default to active image in editor
             for area in context.screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     img = area.spaces.active.image
@@ -408,10 +344,8 @@ class BPSD_OT_save_layer(bpy.types.Operator):
             self.report({'ERROR'}, "No image found to save.")
             return {'CANCELLED'}
 
-        # Get Metadata
         psd_path = img.get("psd_path", context.scene.bpsd_props.active_psd_path)
 
-        # Handle manual override case
         if not img.get("psd_layer_path") and self.layer_path:
             img["psd_layer_path"] = self.layer_path
 
@@ -431,7 +365,6 @@ class BPSD_OT_save_layer(bpy.types.Operator):
             self.report({'INFO'}, msg)
             return {'FINISHED'}
 
-# --- SAVE ALL OPERATOR ---
 class BPSD_OT_save_all_layers(bpy.types.Operator):
     bl_idname = "bpsd.save_all_layers"
     bl_label = "Save All Modified"
@@ -476,7 +409,6 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
             self.report({'INFO'}, msg)
             return {'FINISHED'}
 
-# --- PURGE OPERATOR ---
 class BPSD_OT_clean_orphans(bpy.types.Operator):
     bl_idname = "bpsd.clean_orphans"
     bl_label = "Clean Unused Layers"
@@ -521,20 +453,19 @@ class BPSD_OT_clean_orphans(bpy.types.Operator):
 
         count = len(images_to_remove)
         if count == 0:
-            # self.report({'INFO'}, "No orphaned layers found.")
             return {'CANCELLED'}
-            
+
         for img in images_to_remove:
             bpy.data.images.remove(img)
-            
+
         self.report({'INFO'}, f"Removed {count} orphaned images.")
         return {'FINISHED'}
-    
+
 class BPSD_OT_reload_all(bpy.types.Operator):
     bl_idname = "bpsd.reload_all"
     bl_label = "Reload Loaded Layers"
     bl_description = "Force re-read all currently loaded textures from the PSD"
-    
+
     def execute(self, context):
         props = context.scene.bpsd_props
         active_psd = props.active_psd_path
@@ -577,7 +508,7 @@ class BPSD_OT_reload_all(bpy.types.Operator):
                         try:
                             img.name = new_name
                         except:
-                            pass # Name collision or something, not critical
+                            pass
 
             images_to_reload.append(img)
             requests.append({
@@ -593,7 +524,6 @@ class BPSD_OT_reload_all(bpy.types.Operator):
             self.report({'INFO'}, "No layers to reload.")
             return {'CANCELLED'}
 
-        # 2. Batch Read
         self.report({'INFO'}, f"Reloading {len(requests)} layers...")
         results = psd_engine.read_all_layers(active_psd, requests)
 
@@ -608,7 +538,7 @@ class BPSD_OT_reload_all(bpy.types.Operator):
                 try:
                     img.pixels = results[key]
                     img.update()
-                    img.pack() # Ensure data is saved
+                    img.pack()
                     success_count += 1
                 except Exception as e:
                     print(f"Failed to update image {img.name}: {e}")
@@ -635,30 +565,21 @@ class BPSD_OT_toggle_visibility(bpy.types.Operator):
         if event.shift:
             item.visibility_override = 'PSD'
         else:
-            # Simple Toggle Logic relative to current effective state
-
-            # If currently syncing (PSD)
             if item.visibility_override == 'PSD':
-                # If currently visible -> Force Hide
                 if item.is_visible and not item.hidden_by_parent:
                     item.visibility_override = 'HIDE'
-                # If currently hidden -> Force Show
                 else:
                     item.visibility_override = 'SHOW'
 
-            # If currently Force Hiding -> Force Show
             elif item.visibility_override == 'HIDE':
                  item.visibility_override = 'SHOW'
 
-            # If currently Force Showing -> Force Hide
             elif item.visibility_override == 'SHOW':
                  item.visibility_override = 'HIDE'
 
-        # Trigger node update to reflect visibility changes immediately
         try:
             bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
         except Exception:
-            # If the node group doesn't exist or operator fails, we just ignore it
             pass
 
         return {'FINISHED'}
@@ -676,12 +597,10 @@ class BPSD_OT_load_all_layers(bpy.types.Operator):
 
         requests = []
 
-        # Identify which layers need loading
         for i, item in enumerate(props.layer_list):
             if item.layer_type == "UNKNOWN":
                 continue
 
-            # Color (Skip for Groups/Adjustment layers as they don't have pixel content)
             if item.layer_type not in ["GROUP", "ADJUSTMENT"]:
                 requests.append({
                     'layer_path': item.path,
@@ -692,7 +611,6 @@ class BPSD_OT_load_all_layers(bpy.types.Operator):
                     'layer_id': item.layer_id
                 })
 
-            # Mask (Load for any layer type that has a mask)
             if item.has_mask:
                  requests.append({
                     'layer_path': item.path,
@@ -714,33 +632,27 @@ class BPSD_OT_load_all_layers(bpy.types.Operator):
         psd_name = os.path.basename(active_psd)
 
         for (idx, is_mask), pixels in results.items():
-            # Create or Get Image
             if idx >= len(props.layer_list): continue
             item = props.layer_list[idx]
 
             img = find_loaded_image(active_psd, idx, is_mask, item.layer_id)
 
             if not img:
-                # Naming convention from load_layer
                 display_name = item.name
                 layer_name = f"{psd_name}/{idx:03d}_{display_name}"
                 img_name = f"{layer_name}_MASK" if is_mask else layer_name
 
-                # Always create new if not found by tag
                 img = bpy.data.images.new(img_name, width=props.psd_width, height=props.psd_height, alpha=True)
 
-            # Resize if needed
             if img.size[0] != props.psd_width or img.size[1] != props.psd_height:
                 img.scale(props.psd_width, props.psd_height)
 
             if len(pixels) > 0:
                 img.pixels.foreach_set(pixels)
 
-            # Tag it
             tag_image(img, active_psd, item.path, idx, is_mask, item.layer_id)
             img.pack()
 
-            # Colorspace
             img.colorspace_settings.name = 'Non-Color' if is_mask else 'sRGB'
 
             count += 1
@@ -764,17 +676,14 @@ class BPSD_OT_debug_rw_test(bpy.types.Operator):
 
         try:
             self.report({'INFO'}, f"Reading {active_psd}...")
-            # Read
             layered_file = psapi.LayeredFile.read(active_psd)
 
-            # Construct output path
             dir_name = os.path.dirname(active_psd)
             file_name = os.path.basename(active_psd)
             name, ext = os.path.splitext(file_name)
             output_path = os.path.join(dir_name, f"{name}_1{ext}")
 
             self.report({'INFO'}, f"Writing to {output_path}...")
-            # Write
             layered_file.write(output_path)
 
             self.report({'INFO'}, "Debug RW Test Complete.")

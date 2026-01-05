@@ -7,7 +7,6 @@ def read_file(path):
 
         def parse_layer_structure(layer, current_index_path="", child_index=0, parent_visible=True):
             layer_name = layer.name
-            # Use index-based path for unique identification
             index_path = f"{current_index_path}/{child_index}" if current_index_path else str(child_index)
 
             is_group = False
@@ -47,10 +46,9 @@ def read_file(path):
 
             if layer_type == "LAYER":
                 print(f"Layer {layer_name} has compression {str(layer.compression)}")
-                
+
             if is_group:
                 is_effectively_visible = parent_visible and layer.is_visible
-            
 
                 for i, child in enumerate(layer.layers):
                     node["children"].append(parse_layer_structure(child, index_path, i, is_effectively_visible))
@@ -70,7 +68,6 @@ def read_file(path):
 
 
 def get_layer_by_index_path(layered_file, index_path):
-    """Navigate to a layer using an index-based path like '0/2/1'."""
     indices = [int(i) for i in index_path.split("/")]
     current_layers = layered_file.layers
 
@@ -78,7 +75,6 @@ def get_layer_by_index_path(layered_file, index_path):
     for idx in indices:
         if idx < len(current_layers):
             layer = current_layers[idx]
-            # If this is a group, descend into its children for the next index
             if hasattr(layer, 'layers'):
                 current_layers = layer.layers
         else:
@@ -87,11 +83,6 @@ def get_layer_by_index_path(layered_file, index_path):
     return layer
 
 def get_layer(layered_file, layer_id=0, layer_path=""):
-    """
-    Finds a layer either by unique ID (preferred) or by index path (fallback).
-    Recursive search is used for ID lookup since PhotoshopAPI doesn't provide a direct map yet.
-    """
-    # 1. Try ID Match
     if layer_id and layer_id > 0:
         def search(layers):
             for layer in layers:
@@ -106,9 +97,6 @@ def get_layer(layered_file, layer_id=0, layer_path=""):
         if found_layer:
             return found_layer
 
-        # print(f"BPSD: Layer ID {layer_id} not found. Falling back to path: {layer_path}")
-
-    # 2. Fallback to Path
     if layer_path:
         return get_layer_by_index_path(layered_file, layer_path)
 
@@ -116,14 +104,8 @@ def get_layer(layered_file, layer_id=0, layer_path=""):
 
 
 def calculate_union_bounds(layer_x, layer_y, layer_w, layer_h, canvas_w, canvas_h):
-    """
-    Calculates the union rectangle between the existing layer and the Blender canvas.
-    Returns (union_rect, layer_offset, canvas_offset)
-    """
-    # Blender Canvas Bounds (Always at 0,0)
     c_x, c_y = 0, 0
 
-    # Union Bounds
     u_x = min(layer_x, c_x)
     u_y = min(layer_y, c_y)
     u_r = max(layer_x + layer_w, c_x + canvas_w)
@@ -132,7 +114,6 @@ def calculate_union_bounds(layer_x, layer_y, layer_w, layer_h, canvas_w, canvas_
     u_w = int(u_r - u_x)
     u_h = int(u_b - u_y)
 
-    # Offsets (Where to paste relative to new Union Top-Left)
     offset_l_x = int(layer_x - u_x)
     offset_l_y = int(layer_y - u_y)
 
@@ -146,13 +127,11 @@ def calculate_union_bounds(layer_x, layer_y, layer_w, layer_h, canvas_w, canvas_
 def paste_to_canvas(canvas, source_arr, canvas_w, canvas_h, offset_x, offset_y):
     src_h, src_w = source_arr.shape
 
-    # Destination (Canvas) bounds
     dst_x1 = max(0, offset_x)
     dst_y1 = max(0, offset_y)
     dst_x2 = min(canvas_w, offset_x + src_w)
     dst_y2 = min(canvas_h, offset_y + src_h)
 
-    # Source (Layer) bounds
     src_x1 = dst_x1 - offset_x
     src_y1 = dst_y1 - offset_y
     src_x2 = src_x1 + (dst_x2 - dst_x1)
@@ -216,7 +195,6 @@ def _read_layer_internal(layered_file, layer_path, target_w, target_h, fetch_mas
         if -1 in planar_data:
             paste_to_canvas(c_a, planar_data[-1], target_w, target_h, layer_left, layer_top)
         else:
-            # If no alpha channel exists, the layer is opaque where it has data.
             fill_val = 1.0
             if np.issubdtype(dtype, np.integer):
                 fill_val = np.iinfo(dtype).max
@@ -267,10 +245,6 @@ def read_all_layers(psd_path, requests):
 # --- WRITE LOGIC ---
 
 def _prepare_blender_pixels(blender_pixels, width, height):
-    """
-    Converts flat Blender float pixels (bottom-left origin)
-    to shaped numpy uint8 pixels (top-left origin).
-    """
     pixels = np.array(blender_pixels).reshape((height, width, 4))
     pixels = np.flipud(pixels)
     return (pixels * 255).astype(np.uint8)
@@ -288,7 +262,6 @@ def _write_mask(layer, pixels, canvas_w, canvas_h):
 def _write_color_channels(layer, pixels, canvas_w, canvas_h):
     planar_data = layer.get_image_data()
 
-    # 1. Prepare Blender Data (Canvas Space)
     b_data = {
         0: pixels[:, :, 0],
         1: pixels[:, :, 1],
@@ -296,14 +269,12 @@ def _write_color_channels(layer, pixels, canvas_w, canvas_h):
         -1: pixels[:, :, 3]
     }
 
-    # Case: Empty Layer -> Initialize to Canvas Size
     if not planar_data:
         layer.set_image_data(b_data, width=canvas_w, height=canvas_h)
         layer.center_x = canvas_w / 2
         layer.center_y = canvas_h / 2
         return True
 
-    # Case: Existing Layer -> Union of Bounds
     l_w = layer.width
     l_h = layer.height
     l_x = int(layer.center_x - (l_w / 2))
@@ -317,30 +288,24 @@ def _write_color_channels(layer, pixels, canvas_w, canvas_h):
     all_channels = set(planar_data.keys()) | set(b_data.keys())
     valid_channels = {k for k in all_channels if k >= -1}
 
-    # Determine dtype from existing data
     dtype = np.uint8
     if planar_data:
         dtype = next(iter(planar_data.values())).dtype
 
     for ch in valid_channels:
-        # Create full union buffer
         union_arr = np.zeros((u_h, u_w), dtype=dtype)
 
-        # 1. Paste Old Data (Background)
         if ch in planar_data:
             old_arr = planar_data[ch]
             h, w = old_arr.shape
-            # Safety clip in case bounds calculations drift
             if h <= u_h and w <= u_w:
                 union_arr[offset_l_y:offset_l_y+h, offset_l_x:offset_l_x+w] = old_arr
 
-        # 2. Paste New Canvas Data (Foreground / Overwrite)
         if ch in b_data:
             new_arr = b_data[ch]
             if new_arr.dtype != dtype:
                 new_arr = new_arr.astype(dtype)
 
-            # Using canvas dimensions here
             union_arr[offset_c_y:offset_c_y+canvas_h, offset_c_x:offset_c_x+canvas_w] = new_arr
 
         new_planar_data[ch] = union_arr
@@ -372,7 +337,6 @@ def write_all_layers(psd_path, updates, canvas_w, canvas_h):
         layered_file = psapi.LayeredFile.read(psd_path)
         count = 0
         for data in updates:
-            # Use per-update dimensions to ensure correct reshaping of pixel data
             w = data.get('width', canvas_w)
             h = data.get('height', canvas_h)
 
@@ -390,9 +354,6 @@ def write_all_layers(psd_path, updates, canvas_w, canvas_h):
         return False
 
 def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=False, layer_id=0):
-    """
-    Wrapper around write_all_layers for a single layer.
-    """
     update = {
         'layer_path': layer_path,
         'pixels': blender_pixels,

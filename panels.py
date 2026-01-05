@@ -3,10 +3,6 @@ import os
 
 
 def draw_layer_item(layout, props, item, index, current_indent):
-    """
-    Draws a single layer row (Icon, Name, Mask, Visibility)
-    """
-    # 1. Row Setup
     split = layout.split(factor=0.75)
     row = split.row(align=True)
     vis_row = split.row(align=True)
@@ -17,7 +13,6 @@ def draw_layer_item(layout, props, item, index, current_indent):
 
     is_active_row = (index == props.active_layer_index)
 
-    # 2. Icon Selection
     ind = current_indent
     if item.layer_type == "GROUP":
         icon = 'FILE_FOLDER'
@@ -31,7 +26,6 @@ def draw_layer_item(layout, props, item, index, current_indent):
     else:
         icon = 'IMAGE_DATA'
 
-    # 3. Visibility Icon
     effective_vis = item.is_visible
     if item.visibility_override == 'SHOW': effective_vis = True
     elif item.visibility_override == 'HIDE': effective_vis = False
@@ -41,15 +35,12 @@ def draw_layer_item(layout, props, item, index, current_indent):
     else:
         eye = "LAYER_ACTIVE" if effective_vis else "LAYER_USED"
 
-    # 4. Indentation Spacer
     row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
     row.alignment = 'LEFT'
 
-    # 5. Clipping Indicator
     if item.is_clipping_mask:
         row.label(text='', icon = 'TRACKING_FORWARDS')
 
-    # 6. Name / Select Operator
     if item.layer_type in {"GROUP", "SMART", "ADJUSTMENT", "UNKNOWN"}:
         layer_sub = row.row(align=True)
         layer_sub.alignment = 'LEFT'
@@ -66,7 +57,6 @@ def draw_layer_item(layout, props, item, index, current_indent):
         op.layer_id = item.layer_id
         op.is_mask = False
 
-    # 7. Mask Button
     if item.has_mask:
         mask_sub = row.row(align=True)
         mask_sub.alert = (is_active_row and props.active_is_mask)
@@ -78,7 +68,6 @@ def draw_layer_item(layout, props, item, index, current_indent):
         op.layer_id = item.layer_id
         op.is_mask = True
 
-    # 8. Visibility Toggle
     op = vis_row.operator("bpsd.toggle_visibility", text="", icon=eye, emboss=False)
     op.index = index
 
@@ -94,7 +83,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         layout = self.layout
         props = context.scene.bpsd_props
 
-        # --- SYNC CONTROLS ---
         sync_col = layout.column(align=True)
 
         sync_col.prop(props, "active_psd_image", text="")
@@ -132,7 +120,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         layout.separator()
         layout.label(text="Layers", icon ="RENDERLAYERS")
 
-        # --- LAYER TREE ---
         root_box = layout.box()
         root_col = root_box.column(align=True)
 
@@ -141,7 +128,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
         for i, item in enumerate(props.layer_list):
 
-            # 1. Manage Indentation / Hierarchy
             if item.indent < current_indent:
                 for _ in range(current_indent - item.indent):
                     if len(layout_stack) > 1:
@@ -156,15 +142,12 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             else:
                 current_layout = parent_layout
 
-            # 2. Draw Item
             draw_layer_item(current_layout, props, item, i, current_indent)
 
-            # 3. Push Stack for Groups
             if item.layer_type == "GROUP":
                 layout_stack.append(current_layout)
                 current_indent += 1
 
-        # --- FOOTER ---
         psd_name = props.active_psd_path.replace("\\", "/")
         psd_name = psd_name.split("/")[-1]
         layout.box().operator("bpsd.highlight_psd", text=f"{psd_name}", icon='IMAGE_DATA',emboss=False)
@@ -174,7 +157,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.operator("bpsd.create_psd_nodes", icon='SHADING_RENDERED', text="Make Nodes")
         row.operator("bpsd.update_psd_nodes", icon='FILE_REFRESH', text="Update Nodes")
 
-        # Interpolation Toggle
         icon_interp = 'ALIASED' if props.use_closest_interpolation else 'ANTIALIASED'
         row.prop(props, "use_closest_interpolation", text="", icon=icon_interp, toggle=True)
 
@@ -182,7 +164,10 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
         row.prop(props, "auto_save_on_image_save", text="", icon='CHECKMARK' if props.auto_save_on_image_save else 'CANCEL', toggle=True)
 
-        
+        layout.separator()
+        layout.operator("bpsd.debug_rw_test", icon='FILE_REFRESH', text="Debug RW Test")
+
+
 
 class BPSD_PT_layer_context(bpy.types.Panel):
     bl_label = "Debug"
@@ -240,5 +225,3 @@ class BPSD_PT_layer_context(bpy.types.Panel):
 
         layout.separator()
         layout.operator("bpsd.debug_rw_test", icon='FILE_REFRESH', text="Debug RW Test")
-
-        

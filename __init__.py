@@ -20,20 +20,18 @@ from . import brush_panels
 from . import panels
 from . import node_ops
 
-# --- DATA STRUCTURES ---
-
 class BPSD_LayerItem(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty()# type: ignore
+    name: bpy.props.StringProperty() # type: ignore
     path: bpy.props.StringProperty() # type: ignore
     layer_type: bpy.props.StringProperty() # type: ignore
-    indent: bpy.props.IntProperty(default=0)# type: ignore
-    layer_id: bpy.props.IntProperty(default=0)# type: ignore
-    has_mask: bpy.props.BoolProperty(default=False)# type: ignore
-    is_clipping_mask: bpy.props.BoolProperty(default=False)# type: ignore
-    is_visible: bpy.props.BoolProperty(default=False)# type: ignore
-    hidden_by_parent: bpy.props.BoolProperty(default=False)# type: ignore
-    blend_mode: bpy.props.StringProperty(default="NORMAL")# type: ignore
-    opacity: bpy.props.FloatProperty(default=1.0)# type: ignore
+    indent: bpy.props.IntProperty(default=0) # type: ignore
+    layer_id: bpy.props.IntProperty(default=0) # type: ignore
+    has_mask: bpy.props.BoolProperty(default=False) # type: ignore
+    is_clipping_mask: bpy.props.BoolProperty(default=False) # type: ignore
+    is_visible: bpy.props.BoolProperty(default=False) # type: ignore
+    hidden_by_parent: bpy.props.BoolProperty(default=False) # type: ignore
+    blend_mode: bpy.props.StringProperty(default="NORMAL") # type: ignore
+    opacity: bpy.props.FloatProperty(default=1.0) # type: ignore
     clip_base_index: bpy.props.IntProperty(default=-1) # type: ignore
 
     visibility_override: bpy.props.EnumProperty(
@@ -44,19 +42,17 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
             ('SHOW', "Always Show", "Force visible in Blender"),
             ('HIDE', "Always Hide", "Force hidden in Blender"),
         ],
-        default='PSD'
-    ) # type: ignore
+        default='PSD' # type: ignore
+    )
 
 
 class BPSD_SceneProperties(bpy.types.PropertyGroup):
-    # probably needs an rgb(a) toggle?
-    
-    active_psd_path: bpy.props.StringProperty( name="PSD Path", subtype='FILE_PATH')# type: ignore
-    layer_list: bpy.props.CollectionProperty(type=BPSD_LayerItem)# type: ignore
-    active_layer_index: bpy.props.IntProperty(default=-1)# type: ignore
-    active_layer_path: bpy.props.StringProperty()# type: ignore
-    active_is_mask: bpy.props.BoolProperty()# type: ignore
-    psd_width: bpy.props.IntProperty()# type: ignore
+    active_psd_path: bpy.props.StringProperty(name="PSD Path", subtype='FILE_PATH') # type: ignore
+    layer_list: bpy.props.CollectionProperty(type=BPSD_LayerItem) # type: ignore
+    active_layer_index: bpy.props.IntProperty(default=-1) # type: ignore
+    active_layer_path: bpy.props.StringProperty() # type: ignore
+    active_is_mask: bpy.props.BoolProperty() # type: ignore
+    psd_width: bpy.props.IntProperty() # type: ignore
     psd_height: bpy.props.IntProperty() # type: ignore
     auto_load_on_select: bpy.props.BoolProperty(
         name="Auto-Load",
@@ -95,40 +91,40 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
     last_known_mtime_str: bpy.props.StringProperty(default="0.0") # type: ignore
     structure_signature: bpy.props.StringProperty() # type: ignore
 
-    show_cat_math: bpy.props.BoolProperty(name="Math", default=True)# type: ignore
-    show_cat_light: bpy.props.BoolProperty(name="Light", default=True)# type: ignore
-    show_cat_color: bpy.props.BoolProperty(name="Color", default=True)# type: ignore
-    show_cat_alpha: bpy.props.BoolProperty(name="Alpha", default=True)# type: ignore
-    show_cat_burn: bpy.props.BoolProperty(name="Burn", default=True)# type: ignore
-    show_cat_curves: bpy.props.BoolProperty(name="Curves", default=True)# type: ignore
-    show_cat_misc: bpy.props.BoolProperty(name="Misc", default=True)# type: ignore
+    show_cat_math: bpy.props.BoolProperty(name="Math", default=True) # type: ignore
+    show_cat_light: bpy.props.BoolProperty(name="Light", default=True) # type: ignore
+    show_cat_color: bpy.props.BoolProperty(name="Color", default=True) # type: ignore
+    show_cat_alpha: bpy.props.BoolProperty(name="Alpha", default=True) # type: ignore
+    show_cat_burn: bpy.props.BoolProperty(name="Burn", default=True) # type: ignore
+    show_cat_curves: bpy.props.BoolProperty(name="Curves", default=True) # type: ignore
+    show_cat_misc: bpy.props.BoolProperty(name="Misc", default=True) # type: ignore
     show_frequent_only: bpy.props.BoolProperty(
-        name="Faves Only", 
-        description="Only show favourite brushes", 
+        name="Faves Only",
+        description="Only show favourite brushes",
         default=False
-    )# type: ignore
+    ) # type: ignore
 
     def get_psd_images(self, context):
         items = []
-        
+
         for img in bpy.data.images:
             if img.filepath.lower().endswith('.psd'):
                 items.append((img.name, img.name, img.filepath))
-        
+
         if not items:
             items.append(('NONE', "No Loaded PSDs", "Use Image > Open to load a PSD first"))
-            
+
         return items
 
     active_psd_image: bpy.props.EnumProperty(
         name="Source PSD",
         description="Select a .psd image currently loaded in Blender",
         items=get_psd_images,
-    )# type: ignore
-    
+    ) # type: ignore
+
 
 class BPSDPreferences(bpy.types.AddonPreferences):
-    bl_idname = __name__ # Refers to the module name
+    bl_idname = __name__
 
     frequent_brushes: bpy.props.StringProperty(
         name="Frequent Brushes",
@@ -149,18 +145,14 @@ class BPSDPreferences(bpy.types.AddonPreferences):
         layout.prop(self, "frequent_brushes")
 
 
-# --- CONNECT OPERATOR ---
-
 class BPSD_OT_connect_psd(bpy.types.Operator):
     bl_idname = "bpsd.connect_psd"
     bl_label = "Connect"
     bl_description = "Keep the selected file in sync"
 
     def execute(self, context):
-
         props = context.scene.bpsd_props
 
-        # ALWAYS resolve path from the current dropdown selection (Explicit Sync)
         if props.active_psd_image != 'NONE':
             img = bpy.data.images.get(props.active_psd_image)
             if img:
@@ -169,49 +161,35 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
 
         path = props.active_psd_path
 
-        # 1. Read
         tree_data,w,h = psd_engine.read_file(path)
         if not tree_data:
             self.report({'ERROR'}, "Could not read PSD.")
             return {'CANCELLED'}
-        
+
         for layer in tree_data:
             if layer['layer_type'] == "UNKNOWN":
                 self.report({'WARNING'}, f"A layer could not be read, this might cause data loss upon save!")
-                
-        
+
         props.psd_width = w
         props.psd_height = h
 
-        # 2. Populate
         props.layer_list.clear()
         self.flatten_tree(tree_data, props.layer_list, indent=0)
 
-        # 3. Resolve Clipping Bases (Iterate Bottom-to-Top)
-        indent_map = {} # Maps indent level -> current base index
-        # We iterate backwards because the list is Top-to-Bottom, but bases are below clipping masks
+        indent_map = {}
         for i in range(len(props.layer_list) - 1, -1, -1):
             item = props.layer_list[i]
 
             if item.is_clipping_mask:
-                # This layer is a clipping mask, so it must clip to the current base at this indent
                 if item.indent in indent_map:
                     item.clip_base_index = indent_map[item.indent]
             else:
-                # This is a normal layer, so it becomes the new base for this indent level
                 indent_map[item.indent] = i
 
-        # 4. Calculate Structure Signature
         sig_parts = []
         for item in props.layer_list:
-            # Include fields that determine node structure
-            # Note: We exclude Name (just a label) and Blend Mode for non-groups (just a value update)
-            # This allows the "Update Nodes" operator to handle these changes without a full regeneration warning.
-
-            # Base topology
             part = f"{item.layer_id}:{item.layer_type}:{item.indent}:{item.is_clipping_mask}:{item.has_mask}:{item.clip_base_index}"
 
-            # Groups use blend mode for topology (Passthrough vs Normal)
             if item.layer_type == 'GROUP':
                 part += f":{item.blend_mode}"
 
@@ -220,23 +198,20 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
 
         props.active_layer_index = -1
         props.active_layer_path = ""
-        
+
         if props.auto_purge:
             bpy.ops.bpsd.clean_orphans('EXEC_DEFAULT')
-        
+
         bpy.ops.bpsd.reload_all('EXEC_DEFAULT')
 
         if os.path.exists(props.active_psd_path):
             props.last_known_mtime_str = str(os.path.getmtime(props.active_psd_path))
 
-        # Also reload the main PSD image in Blender if it exists
         if props.active_psd_image != 'NONE':
             main_img = bpy.data.images.get(props.active_psd_image)
             if main_img:
                 main_img.reload()
 
-        # 5. Auto-Update Node Tree
-        # Update the node group if it exists (global update), regardless of active object
         ng = bpy.data.node_groups.get("BPSD_PSD_Output")
         if ng:
             stored_sig = ng.get("bpsd_structure_signature", "")
@@ -250,15 +225,13 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
 
         self.report({'INFO'}, "Connected!")
         return {'FINISHED'}
-    
+
     @classmethod
     def poll(cls, context):
-        # The button is clickable if a valid PSD is selected in the dropdown
         props = context.scene.bpsd_props
         return props.active_psd_image != 'NONE' and props.active_psd_image in bpy.data.images
 
     def flatten_tree(self, nodes, collection, indent):
-        # Reverse to show top layers first
         for node in nodes:
             item = collection.add()
             item.name = node['name']
@@ -311,7 +284,6 @@ class BPSD_OT_highlight_psd(bpy.types.Operator):
             self.report({'ERROR'}, "Image not found.")
             return {'CANCELLED'}
 
-        # Use the helper from ui_ops to focus the image editor
         ui_ops.focus_image_editor(context, img)
         props.active_layer_index = -1
 
@@ -321,14 +293,13 @@ class BPSD_OT_highlight_psd(bpy.types.Operator):
 def auto_sync_check():
     context = bpy.context
     if not context.scene: return 1.0
-    
+
     props = context.scene.bpsd_props
     path = props.active_psd_path
 
     if not props.auto_sync_incoming or not path or not os.path.exists(path):
         return 2.0
 
-    # SAFETY CHECK: Reload main PSD if modified in Blender (since we can't save it back)
     if props.active_psd_image != 'NONE':
         main_img = bpy.data.images.get(props.active_psd_image)
         if main_img and main_img.is_dirty:
@@ -336,21 +307,14 @@ def auto_sync_check():
             main_img.reload()
 
     try:
-        # 1. Get exact OS time
         current_mtime = os.path.getmtime(path)
-        
-        # 2. Get stored time (High Precision)
+
         try:
             stored_mtime = float(props.last_known_mtime_str)
         except ValueError:
             stored_mtime = 0.0
-        
-        # 3. Comparison with Epsilon (Threshold)
-        # We check if the difference is significant (> 0.01 seconds)
-        # This prevents loops caused by micro-jitter
-        if abs(current_mtime - stored_mtime) > 0.01:
 
-            # Check for dirty layers
+        if abs(current_mtime - stored_mtime) > 0.01:
             has_unsaved = False
             for img in bpy.data.images:
                 if img.get("bpsd_managed") and img.get("psd_path") == path and img.is_dirty:
@@ -359,26 +323,19 @@ def auto_sync_check():
 
             if has_unsaved:
                 print("BPSD: Photoshop file updated, but Auto-Sync skipped due to unsaved changes in Blender.")
-                props.last_known_mtime_str = str(current_mtime) # Acknowledge change to prevent looping
+                props.last_known_mtime_str = str(current_mtime)
                 return 1.0
 
-            # print(f"BPSD: Change detected. Disk: {current_mtime} != Stored: {stored_mtime}")
-
-            # Update IMMEDIATELY to prevent double-triggering next tick
             props.last_known_mtime_str = str(current_mtime)
 
             if context.window:
                 bpy.ops.bpsd.connect_psd('EXEC_DEFAULT')
-                
+
     except Exception as e:
         print(f"BPSD Watcher Error: {e}")
-        
+
     return 1.0
 
-# --- WATCHERS ---
-# Moved to ui_ops.py to prevent circular dependency loops
-
-# --- REGISTRATION ---
 
 classes = (
     BPSDPreferences,
@@ -398,7 +355,7 @@ classes = (
     ui_ops.BPSD_OT_debug_rw_test,
 
     panels.BPSD_PT_main_panel,
-    
+
     brush_ops.BPSD_OT_qb_brush_blend,
     brush_ops.BPSD_OT_qb_brush_falloff,
     brush_ops.BPSD_OT_qb_brush_set,
@@ -417,7 +374,6 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.Scene.bpsd_props = bpy.props.PointerProperty(type=BPSD_SceneProperties)
 
-    # Initialize Cache
     ui_ops.init_dirty_cache()
 
     bpy.app.timers.register(ui_ops.image_dirty_watcher, persistent=True)
