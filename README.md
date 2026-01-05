@@ -3,7 +3,7 @@ About
 Experimental Blender (4.x) add-on that allows you to seamlessly edit a PSD file's layers in Photoshop and Blender at the same time. Any changes you make in Blender will immediately sync with Photoshop upon hitting save, and similarly, hitting save in Photoshop will see your changes immediately reflected in Blender. 
 There's also an approximate live preview of the PSD composite.
 
-<img width="311" height="513" alt="image" src="https://github.com/user-attachments/assets/5e46b5fb-ffae-49ed-b674-08b0ee48d7a0" />
+<img width="316" height="675" alt="Screenshot 2026-01-05 022542" src="https://github.com/user-attachments/assets/39ac22a0-6c16-4c14-ba8b-ba86d81234bb" />
 
 ## How to use
 - add `WarnRunningScripts 0` to PSUserConfig.txt to update the image in Photoshop silently
