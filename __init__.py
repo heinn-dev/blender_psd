@@ -86,7 +86,7 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
     ) # type: ignore
 
     use_closest_interpolation: bpy.props.BoolProperty(
-        name="Pixel Art Mode",
+        name="Interpolation",
         description="Use Closest interpolation for crisp pixels",
         default=False,
         update=node_ops.update_interpolation_callback
@@ -395,6 +395,7 @@ classes = (
     ui_ops.BPSD_OT_reload_all,
     ui_ops.BPSD_OT_toggle_visibility,
     ui_ops.BPSD_OT_load_all_layers,
+    ui_ops.BPSD_OT_debug_rw_test,
 
     panels.BPSD_PT_main_panel,
     

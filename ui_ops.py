@@ -2,6 +2,7 @@ import sys
 import bpy
 import os
 import numpy as np
+import photoshopapi as psapi
 from . import psd_engine
 import subprocess
 import time
@@ -746,3 +747,41 @@ class BPSD_OT_load_all_layers(bpy.types.Operator):
 
         self.report({'INFO'}, f"Loaded {count} images.")
         return {'FINISHED'}
+
+
+class BPSD_OT_debug_rw_test(bpy.types.Operator):
+    bl_idname = "bpsd.debug_rw_test"
+    bl_label = "Debug: Read/Write Test"
+    bl_description = "Debug: Read active PSD and write back as file_1.psd (bypassing engine)"
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+        active_psd = props.active_psd_path
+
+        if not active_psd or not os.path.exists(active_psd):
+            self.report({'ERROR'}, "No active PSD file found.")
+            return {'CANCELLED'}
+
+        try:
+            self.report({'INFO'}, f"Reading {active_psd}...")
+            # Read
+            layered_file = psapi.LayeredFile.read(active_psd)
+
+            # Construct output path
+            dir_name = os.path.dirname(active_psd)
+            file_name = os.path.basename(active_psd)
+            name, ext = os.path.splitext(file_name)
+            output_path = os.path.join(dir_name, f"{name}_1{ext}")
+
+            self.report({'INFO'}, f"Writing to {output_path}...")
+            # Write
+            layered_file.write(output_path)
+
+            self.report({'INFO'}, "Debug RW Test Complete.")
+            return {'FINISHED'}
+
+        except Exception as e:
+            self.report({'ERROR'}, f"Debug RW Failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
