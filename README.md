@@ -26,7 +26,7 @@ The psd preview will look black if Photoshop isn't running, as it is necessary t
 
 ⚠️ Still investigating a bug where some layers will be straight up blank upon loading. If you edit that layer and save it, it will be nuked. There's a jank workaround for now : move that layer so that it goes out of bounds, draw something there, restore the layer position. It should then load fine.
 
-⚠️ Text Layers (and other more niche types of layers) can't be loaded or saved yet! If you see a blank layer in your layer list (named "UNKNOWN"), do not save unless you really care about that layer. 
+⚠️ Text Layers (and other more niche types of layers) can't be loaded or saved yet! If you see a blank layer in your layer list (named "UNKNOWN"), do not save unless you really don't care about that layer. 
 
 ⚠️ While there are some safety features built in (you can't overwrite the changes in Photoshop when saving from Blender if the file is unsaved and viceversa), I haven't tested this add-on throughoutly and **data loss may still occur!** Back up your files!.
 
