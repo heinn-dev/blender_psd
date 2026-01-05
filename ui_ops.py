@@ -279,6 +279,18 @@ def perform_save_images(context, psd_path, images):
         if not layer_path:
             continue
 
+        # Check for Smart Object restriction
+        item = None
+        if layer_id > 0:
+            for it in props.layer_list:
+                if it.layer_id == layer_id:
+                    item = it
+                    break
+
+        if item and item.layer_type == 'SMART' and not is_mask:
+            print(f"Skipping save for Smart Object content: {item.name}")
+            continue
+
         updates.append({
             'layer_path': layer_path,
             'pixels': np.array(img.pixels),

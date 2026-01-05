@@ -28,7 +28,7 @@ def read_file(path):
 
             if layer_name == "":
                 layer_type = "UNKNOWN"
-                layer_name = "---"
+                layer_name = "UNKNOWN"
 
             node = {
                 "name": layer_name,

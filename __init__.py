@@ -306,6 +306,18 @@ def auto_sync_check():
             print(f"BPSD: Reverting accidental changes to {main_img.name}")
             main_img.reload()
 
+    # # Revert dirty Smart Objects (Color data is read-only)
+    # for img in bpy.data.images:
+    #     if img.is_dirty and img.get("bpsd_managed") and not img.get("psd_is_mask", False):
+    #         l_id = img.get("psd_layer_id", 0)
+    #         if l_id > 0:
+    #             for item in props.layer_list:
+    #                 if item.layer_id == l_id:
+    #                     if item.layer_type == 'SMART':
+    #                         print(f"BPSD: Reverting changes to Smart Object {img.name}")
+    #                         img.reload()
+    #                     break
+
     try:
         current_mtime = os.path.getmtime(path)
 

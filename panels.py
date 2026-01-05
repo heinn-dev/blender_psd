@@ -41,7 +41,7 @@ def draw_layer_item(layout, props, item, index, current_indent):
     if item.is_clipping_mask:
         row.label(text='', icon = 'TRACKING_FORWARDS')
 
-    if item.layer_type in {"GROUP", "SMART", "ADJUSTMENT", "UNKNOWN"}:
+    if item.layer_type in {"GROUP", "ADJUSTMENT", "UNKNOWN", "SMART"}:
         layer_sub = row.row(align=True)
         layer_sub.alignment = 'LEFT'
         layer_sub.enabled = False
