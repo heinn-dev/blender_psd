@@ -15,20 +15,20 @@ There's also an approximate live preview of the PSD composite.
 - to live-preview your changes, press the `Make Nodes` button and hook it up to a material output
   - if you have the material set up, you can hide layers by clicking the dot on the hierarchy
   - you can shift click this dot to reset it
-
 - after a `Save`, clicking on the filename below the layers will focus the reloaded psd with your changes
-- 
+
 
 Pressing `Save` will update your changes in the .psd and Photoshop, if it is open. Only layers marked as dirty (`Image*`) will be saved in the psd. Note that pressing `Alt-S` to save the layer doesnt save the psd by default (you can enable this by clicking the toggle next to the save button, but it is quite slow). 
 The psd preview will look black if Photoshop isn't running, as it is necessary to update the composite image.
 
 ⚠️ Warning ⚠️
 =========
-While there are some safety features built in (you can't overwrite the changes in Photoshop when saving from Blender if the file is unsaved and viceversa), I haven't tested this add-on throughoutly and **data loss may still occur!** Back up your files!.
 
-Still investigating a bug where some layers will be straight up blank upon loading. If you edit that layer and save it, it will be nuked. There's a jank workaround for now : move that layer so that it goes out of bounds, draw something there, restore the layer position. It should then load fine.
+⚠️ Still investigating a bug where some layers will be straight up blank upon loading. If you edit that layer and save it, it will be nuked. There's a jank workaround for now : move that layer so that it goes out of bounds, draw something there, restore the layer position. It should then load fine.
 
-Text Layers (and other more niche types of layers) can't be loaded or saved yet! If you see a blank layer in your layer list (named "UNKNOWN"), do not save unless you really care about that layer. 
+⚠️ Text Layers (and other more niche types of layers) can't be loaded or saved yet! If you see a blank layer in your layer list (named "UNKNOWN"), do not save unless you really don't care about that layer. 
+
+⚠️ While there are some safety features built in (you can't overwrite the changes in Photoshop when saving from Blender if the file is unsaved and viceversa), I haven't tested this add-on throughoutly and **data loss may still occur!** Back up your files!.
 
 Thanks
 =========
