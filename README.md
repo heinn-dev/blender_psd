@@ -5,6 +5,11 @@ There's also an approximate live preview of the PSD composite, among some featur
 
 <img width="316" height="675" alt="Screenshot 2026-01-05 022542" src="https://github.com/user-attachments/assets/39ac22a0-6c16-4c14-ba8b-ba86d81234bb" />
 
+## Download & Install
+### [> Download Latest Release <](https://github.com/heinn-dev/blender_psd/releases/latest/download/release.zip)
+
+Drag into Blender or go to `Preferences > Add-ons > Install from disk`
+
 ## How to use
 - add `WarnRunningScripts 0` to PSUserConfig.txt to update the image in Photoshop silently
 - in Blender, open the image editor, drag in a .psd
@@ -32,7 +37,7 @@ Note that pressing `Alt-S` to save the layer doesnt save the psd by default (you
 
 ⚠️ Linked Layers are a bit funky. Ensure that the image is correctly linked in Photoshop, or the file wont load correctly.
 
-⚠️ While there are some safety features built in (you can't overwrite the changes in Photoshop when saving from Blender if the file is unsaved and viceversa), I haven't tested this add-on throughoutly and **data loss may still occur!** Back up your files!.
+⚠️ While there are some safety features built in (you can't overwrite the changes in Photoshop when saving from Blender if the file is unsaved and viceversa, and it will warn you), it's easy sometimes to not keep track of unchanged saves and have the two programs desync. You can always manually reload from disk in Photoshop (F12) or on the add-on.
 
 Thanks
 =========
