@@ -1,5 +1,6 @@
 import bpy
 import os
+from . import ui_ops
 
 
 def draw_layer_item(layout, props, item, index, current_indent):
@@ -37,25 +38,42 @@ def draw_layer_item(layout, props, item, index, current_indent):
 
     row.separator(factor=min(( max(ind + 2, 0) * 1.2), 8))
     row.alignment = 'LEFT'
-
+    
+    
     if item.is_clipping_mask:
         row.label(text='', icon = 'TRACKING_FORWARDS')
 
-    if item.layer_type in {"GROUP", "ADJUSTMENT", "UNKNOWN", "SMART"}:
+    # Determine display name
+    display_name = item.name
+
+    # Check for dirty state
+    has_unsaved = False
+    img_c = ui_ops.find_loaded_image(props.active_psd_path, index, False, item.layer_id)
+    if img_c and img_c.is_dirty: has_unsaved = True
+
+    if not has_unsaved and item.has_mask:
+        img_m = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
+        if img_m and img_m.is_dirty: has_unsaved = True
+
+    if has_unsaved:
+        display_name += " *"
+
+    if item.layer_type in {"GROUP", "ADJUSTMENT", "UNKNOWN"}:
         layer_sub = row.row(align=True)
         layer_sub.alignment = 'LEFT'
         layer_sub.enabled = False
-        op = layer_sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False )
+        op = layer_sub.operator( "bpsd.select_layer", text=display_name, icon=icon, emboss=False )
     else:
         layer_sub = row.row(align=True)
         layer_sub.alert = (is_active_row and not props.active_is_mask)
         layer_sub.alignment = 'LEFT'
 
-        op = layer_sub.operator( "bpsd.select_layer", text=item.name, icon=icon, emboss=False )
+        op = layer_sub.operator( "bpsd.select_layer", text=display_name, icon=icon, emboss=False )
         op.index = index
         op.path = item.path
         op.layer_id = item.layer_id
         op.is_mask = False
+
 
     if item.has_mask:
         mask_sub = row.row(align=True)
@@ -67,6 +85,8 @@ def draw_layer_item(layout, props, item, index, current_indent):
         op.path = item.path
         op.layer_id = item.layer_id
         op.is_mask = True
+        
+        
 
     op = vis_row.operator("bpsd.toggle_visibility", text="", icon=eye, emboss=False)
     op.index = index
@@ -162,10 +182,10 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
         row = layout.row(align=True)
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
-        row.prop(props, "auto_save_on_image_save", text="", icon='CHECKMARK' if props.auto_save_on_image_save else 'CANCEL', toggle=True)
+        row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
 
         layout.separator()
-        layout.operator("bpsd.debug_rw_test", icon='FILE_REFRESH', text="Debug RW Test")
+        # layout.operator("bpsd.debug_rw_test", icon='FILE_REFRESH', text="Debug RW Test")
 
 
 

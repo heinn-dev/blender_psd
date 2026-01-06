@@ -279,7 +279,6 @@ def perform_save_images(context, psd_path, images):
         if not layer_path:
             continue
 
-        # Check for Smart Object restriction
         item = None
         if layer_id > 0:
             for it in props.layer_list:
@@ -302,7 +301,7 @@ def perform_save_images(context, psd_path, images):
         valid_images.append(img)
 
     if not updates:
-        return {'CANCELLED'}, "No valid images to save."
+        return {'CANCELLED'}, "No images to save."
 
     canvas_w = updates[0]['width']
     canvas_h = updates[0]['height']
