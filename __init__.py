@@ -12,6 +12,7 @@ bl_info = {
 
 import os
 import bpy
+from bpy.app.handlers import persistent
 
 from . import psd_engine
 from . import ui_ops
@@ -412,6 +413,21 @@ classes = (
     node_ops.BPSD_OT_update_psd_nodes,
 )
 
+@persistent
+def bpsd_load_post_handler(dummy):
+    for scene in bpy.data.scenes:
+        if hasattr(scene, 'bpsd_props'):
+            props = scene.bpsd_props
+            props.active_psd_path = ""
+            props.layer_list.clear()
+            props.active_layer_index = -1
+            props.active_layer_path = ""
+            props.active_is_mask = False
+            props.psd_width = 0
+            props.psd_height = 0
+            props.last_known_mtime_str = "0.0"
+            props.structure_signature = ""
+
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
@@ -421,8 +437,11 @@ def register():
 
     bpy.app.timers.register(ui_ops.image_dirty_watcher, persistent=True)
     bpy.app.timers.register(auto_sync_check, persistent=True)
+    bpy.app.handlers.load_post.append(bpsd_load_post_handler)
 
 def unregister():
+    if bpsd_load_post_handler in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(bpsd_load_post_handler)
     del bpy.types.Scene.bpsd_props
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
