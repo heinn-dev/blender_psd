@@ -119,14 +119,13 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row = sync_col.row(align=True)
         button_text = "Reload from disk" if is_already_synced else "Sync file"
         row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text=button_text)
-
         if is_already_synced:
-            row.operator("bpsd.stop_sync", text="", icon='X')
-
+            row.operator("bpsd.stop_sync", icon='X')
         row.enabled = is_valid
 
-        if props.active_psd_path and len(props.layer_list) > 0:
-            sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
+
+        sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
+
 
         row = sync_col.row(align=True)
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='FILE_REFRESH' if props.auto_sync_incoming else 'CANCEL')
