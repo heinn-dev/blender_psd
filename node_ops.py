@@ -525,11 +525,12 @@ class BPSD_OT_create_psd_nodes(bpy.types.Operator):
 
         if ng:
              ng.nodes.clear()
+             ng.interface.clear()
         else:
              ng = bpy.data.node_groups.new(name=group_name, type='ShaderNodeTree')
-             ng.interface.new_socket(name="Out Color", in_out='OUTPUT', socket_type='NodeSocketColor')
-             ng.interface.new_socket(name="Out Alpha", in_out='OUTPUT', socket_type='NodeSocketFloat')
-             ng.interface.new_socket(name="Out Shader", in_out='OUTPUT', socket_type='NodeSocketShader')
+        ng.interface.new_socket(name="Out Color", in_out='OUTPUT', socket_type='NodeSocketColor')
+        ng.interface.new_socket(name="Out Alpha", in_out='OUTPUT', socket_type='NodeSocketFloat')
+        ng.interface.new_socket(name="Out Shader", in_out='OUTPUT', socket_type='NodeSocketShader')
 
         ng["bpsd_structure_signature"] = props.structure_signature
 
