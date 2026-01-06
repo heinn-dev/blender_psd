@@ -3,4 +3,5 @@ __pycache__/
 *$py.class
 *.psd
 *.md
-bpsd_target.txt
+*.whl
+*.txt

@@ -1,0 +1,51 @@
+name: Build and Release Add-on
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Download Wheel from PhotoshopAPI
+        uses: robinraju/release-downloader@v1.8
+        with:
+          repository: 'heinn-dev/PhotoshopAPI'
+          tag: 'wheel'       # The tag you mentioned
+          fileName: '*.whl'  # Wildcard: Grabs ANY .whl file found in that release
+          out-file-path: 'wheels/' # Downloads directly into your repo's wheels folder
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. Prepare the Folder Structure for Zipping
+      # Blender add-ons should serve a folder, not loose files.
+      # We move everything into a temp folder named 'blender_psd' before zipping.
+      - name: Stage Add-on Files
+        run: |
+          mkdir release_stage
+          mkdir release_stage/blender_psd
+          
+          # Copy everything from current dir to the stage dir
+          # Excluding the .git folder and the staging folder itself
+          rsync -av --progress . release_stage/blender_psd --exclude .git --exclude .github --exclude release_stage
+
+      # 4. Zip the Staged Folder
+      - name: Zip Add-on
+        run: |
+          cd release_stage
+          zip -r ../blender_psd_addon.zip blender_psd/
+
+      # 5. Upload the Zip to your Release Page
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: blender_psd_addon.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
