@@ -7,6 +7,7 @@ There's also an approximate live preview of the PSD composite, among some featur
 
 ## Download & Install
 [Download Latest Release (Zip)](https://github.com/heinn-dev/blender_psd/releases/latest/download/release.zip)
+
 Drag into Blender or go to `Preferences > Add-ons > Install from disk`
 
 ## How to use
