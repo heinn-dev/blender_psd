@@ -173,6 +173,16 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
         props.psd_width = w
         props.psd_height = h
 
+        saved_overrides = {}
+        for item in props.layer_list:
+            if item.layer_id > 0 and item.visibility_override != 'PSD':
+                saved_overrides[item.layer_id] = item.visibility_override
+
+        saved_active_layer_id = 0
+        if props.active_layer_index >= 0 and props.active_layer_index < len(props.layer_list):
+            saved_active_layer_id = props.layer_list[props.active_layer_index].layer_id
+        saved_active_is_mask = props.active_is_mask
+
         props.layer_list.clear()
         self.flatten_tree(tree_data, props.layer_list, indent=0)
 
@@ -196,8 +206,19 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             sig_parts.append(part)
         props.structure_signature = "|".join(sig_parts)
 
+        for item in props.layer_list:
+            if item.layer_id in saved_overrides:
+                item.visibility_override = saved_overrides[item.layer_id]
+
         props.active_layer_index = -1
         props.active_layer_path = ""
+        if saved_active_layer_id > 0:
+            for i, item in enumerate(props.layer_list):
+                if item.layer_id == saved_active_layer_id:
+                    props.active_layer_index = i
+                    props.active_layer_path = item.path
+                    props.active_is_mask = saved_active_is_mask
+                    break
 
         if props.auto_purge:
             bpy.ops.bpsd.clean_orphans('EXEC_DEFAULT')
@@ -270,7 +291,7 @@ class BPSD_OT_stop_sync(bpy.types.Operator):
 class BPSD_OT_highlight_psd(bpy.types.Operator):
     bl_idname = "bpsd.highlight_psd"
     bl_label = "Highlight PSD"
-    bl_description = "Show the main PSD file in the Image Editor"
+    bl_description = "Toggle between composited layers and PSD preview in the node output"
 
     def execute(self, context):
         props = context.scene.bpsd_props
@@ -283,6 +304,16 @@ class BPSD_OT_highlight_psd(bpy.types.Operator):
         if not img:
             self.report({'ERROR'}, "Image not found.")
             return {'CANCELLED'}
+
+        ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+        if ng:
+            for node in ng.nodes:
+                if node.get("bpsd_output_toggle"):
+                    current = node.inputs['Factor'].default_value
+                    node.inputs['Factor'].default_value = 0.0 if current > 0.5 else 1.0
+                    mode = "PSD Preview" if node.inputs['Factor'].default_value > 0.5 else "Composited"
+                    self.report({'INFO'}, f"Output: {mode}")
+                    break
 
         ui_ops.focus_image_editor(context, img)
         props.active_layer_index = -1

@@ -529,6 +529,7 @@ class BPSD_OT_create_psd_nodes(bpy.types.Operator):
              ng = bpy.data.node_groups.new(name=group_name, type='ShaderNodeTree')
              ng.interface.new_socket(name="Out Color", in_out='OUTPUT', socket_type='NodeSocketColor')
              ng.interface.new_socket(name="Out Alpha", in_out='OUTPUT', socket_type='NodeSocketFloat')
+             ng.interface.new_socket(name="Out Shader", in_out='OUTPUT', socket_type='NodeSocketShader')
 
         ng["bpsd_structure_signature"] = props.structure_signature
 
@@ -556,8 +557,50 @@ class BPSD_OT_create_psd_nodes(bpy.types.Operator):
              final_alp = start_val.outputs[0]
 
         output_node.location = (end_x + 200, 0)
-        links.new(final_col, output_node.inputs['Out Color'])
+
+        psd_tex = None
+        if props.active_psd_image != 'NONE':
+            main_img = bpy.data.images.get(props.active_psd_image)
+            if main_img:
+                psd_tex = nodes.new('ShaderNodeTexImage')
+                psd_tex.image = main_img
+                psd_tex.label = "PSD Preview"
+                psd_tex.location = (end_x - 300, 200)
+                psd_tex["bpsd_psd_preview"] = True
+
+        output_mix = nodes.new('ShaderNodeMix')
+        output_mix.data_type = 'RGBA'
+        output_mix.blend_type = 'MIX'
+        output_mix.label = "Output Toggle"
+        output_mix.location = (end_x + 50, 100)
+        output_mix["bpsd_output_toggle"] = True
+        output_mix.inputs['Factor'].default_value = 0.0
+
+        links.new(final_col, output_mix.inputs['A'])
+        if psd_tex:
+            links.new(psd_tex.outputs['Color'], output_mix.inputs['B'])
+        else:
+            output_mix.inputs['B'].default_value = (0.5, 0.5, 0.5, 1.0)
+
+        links.new(output_mix.outputs['Result'], output_node.inputs['Out Color'])
         links.new(final_alp, output_node.inputs['Out Alpha'])
+
+        transparent = nodes.new('ShaderNodeBsdfTransparent')
+        transparent.location = (end_x - 100, -200)
+        transparent.label = "Transparent"
+
+        emission = nodes.new('ShaderNodeEmission')
+        emission.location = (end_x - 100, -350)
+        emission.label = "Color Emission"
+        links.new(output_mix.outputs['Result'], emission.inputs['Color'])
+
+        mix_shader = nodes.new('ShaderNodeMixShader')
+        mix_shader.location = (end_x + 50, -250)
+        mix_shader.label = "Alpha Mix"
+        links.new(final_alp, mix_shader.inputs['Fac'])
+        links.new(transparent.outputs['BSDF'], mix_shader.inputs[1])
+        links.new(emission.outputs['Emission'], mix_shader.inputs[2])
+        links.new(mix_shader.outputs['Shader'], output_node.inputs['Out Shader'])
 
         if has_active_material:
             mat = obj.active_material
@@ -577,6 +620,19 @@ class BPSD_OT_create_psd_nodes(bpy.types.Operator):
             root_node.label = "PSD Output"
             root_node.select = True
             mat.node_tree.nodes.active = root_node
+
+            mat_output = None
+            for n in mat.node_tree.nodes:
+                if n.type == 'OUTPUT_MATERIAL' and n.get("bpsd_managed"):
+                    mat_output = n
+                    break
+
+            if not mat_output:
+                mat_output = mat.node_tree.nodes.new('ShaderNodeOutputMaterial')
+                mat_output["bpsd_managed"] = True
+                mat_output.location = (root_node.location.x + 300, root_node.location.y - 100)
+
+            mat.node_tree.links.new(root_node.outputs['Out Shader'], mat_output.inputs['Surface'])
 
         self.report({'INFO'}, "Created/Updated PSD Node Network")
         return {'FINISHED'}

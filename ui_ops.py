@@ -195,6 +195,10 @@ class BPSD_OT_select_layer(bpy.types.Operator):
         props.active_layer_path = self.path
         props.active_is_mask = self.is_mask
 
+        item = props.layer_list[self.index] if self.index < len(props.layer_list) else None
+        if item and item.layer_type == 'SMART' and not self.is_mask:
+            self.report({'WARNING'}, "Smart Object layers cannot be saved back to the PSD")
+
         existing_img = find_loaded_image(props.active_psd_path, self.index, self.is_mask, self.layer_id)
 
         if existing_img:
@@ -309,6 +313,9 @@ def perform_save_images(context, psd_path, images):
     success = psd_engine.write_all_layers(psd_path, updates, canvas_w, canvas_h)
 
     if success:
+        if os.path.exists(psd_path):
+            props.last_known_mtime_str = str(os.path.getmtime(psd_path))
+
         for img in valid_images:
             try:
                 img.pack()
@@ -379,7 +386,13 @@ class BPSD_OT_save_layer(bpy.types.Operator):
 class BPSD_OT_save_all_layers(bpy.types.Operator):
     bl_idname = "bpsd.save_all_layers"
     bl_label = "Save All Modified"
-    bl_description = "Save all managed textures that have unsaved changes to the PSD"
+    bl_description = "Save all managed textures that have unsaved changes to the PSD (Shift-click to force save all)"
+
+    force: bpy.props.BoolProperty(default=False) # type: ignore
+
+    def invoke(self, context, event):
+        self.force = event.shift
+        return self.execute(context)
 
     def execute(self, context):
         props = context.scene.bpsd_props
@@ -394,7 +407,7 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
             if not img.get("bpsd_managed"):
                 continue
 
-            if not img.is_dirty:
+            if not self.force and not img.is_dirty:
                 continue
 
             if not img.get("psd_layer_path"):
@@ -403,10 +416,12 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
             images_to_save.append(img)
 
         if not images_to_save:
-            self.report({'INFO'}, "No unsaved changes found.")
+            msg = "No layers loaded." if self.force else "No unsaved changes found."
+            self.report({'INFO'}, msg)
             return {'CANCELLED'}
 
-        self.report({'INFO'}, f"Batch saving {len(images_to_save)} layers...")
+        action = "Force saving" if self.force else "Batch saving"
+        self.report({'INFO'}, f"{action} {len(images_to_save)} layers...")
 
         status, msg = perform_save_images(context, active_psd, images_to_save)
 
