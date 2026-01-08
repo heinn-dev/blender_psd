@@ -61,8 +61,11 @@ def draw_layer_item(layout, props, item, index, current_indent):
     if item.layer_type in {"GROUP", "ADJUSTMENT", "UNKNOWN"}:
         layer_sub = row.row(align=True)
         layer_sub.alignment = 'LEFT'
-        layer_sub.enabled = False
         op = layer_sub.operator( "bpsd.select_layer", text=display_name, icon=icon, emboss=False )
+        op.index = index
+        op.path = item.path
+        op.layer_id = item.layer_id
+        op.is_mask = False
     else:
         layer_sub = row.row(align=True)
         layer_sub.alert = (is_active_row and not props.active_is_mask)
@@ -91,6 +94,11 @@ def draw_layer_item(layout, props, item, index, current_indent):
     op = vis_row.operator("bpsd.toggle_visibility", text="", icon=eye, emboss=False)
     op.index = index
 
+def draw_layer_panel(layout, props, item):
+    item = props.layer_list[props.active_layer_index]
+    box = layout.box()
+    box.label(text=f"{item.name} ({item.layer_type})", icon='PREFERENCES')
+    box.prop(item, "blend_mode", text="Blend Mode")
 
 class BPSD_PT_main_panel(bpy.types.Panel):
     bl_label = "Photoshop Sync"
@@ -116,11 +124,8 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 synced_path = os.path.normpath(props.active_psd_path)
                 is_already_synced = (selected_path == synced_path)
 
-        if is_valid and props.active_psd_path:
-            sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
-        else:
-            sync_col.label(text="No file synced", icon='FILE')
-            
+        sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
+        
         row = sync_col.row(align=True)
         button_text = "Reload from disk" if is_already_synced else "Sync file"
         row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text=button_text)
@@ -128,16 +133,19 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row.operator("bpsd.stop_sync", icon='X')
         row.enabled = is_valid
 
+
+
         row = sync_col.row(align=True)
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='UV_SYNC_SELECT' if props.auto_sync_incoming else 'CANCEL')
         row.prop(props, "auto_refresh_ps", text="Sync to PS", icon='UV_SYNC_SELECT' if props.auto_refresh_ps else 'CANCEL')
         row.enabled = is_valid
 
+
         if not is_valid: return
         if len(props.layer_list) == 0: return
 
         layout.separator()
-        # layout.label(text="Layers", icon ="RENDERLAYERS")
+        layout.label(text="Layers", icon ="RENDERLAYERS")
 
         root_box = layout.box()
         root_col = root_box.column(align=True)
@@ -187,6 +195,9 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         icon_toggle = 'HIDE_OFF' if is_preview else 'NODETREE'
         row_hl.operator("bpsd.toggle_output_mode", text="", icon=icon_toggle, depress=is_preview)
 
+        if props.active_layer_index >= 0 and props.active_layer_index < len(props.layer_list):
+            draw_layer_panel(layout, props, item)
+            
         layout.separator()
 
         row = layout.row(align=True)
@@ -199,7 +210,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row = layout.row(align=True)
         
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
-        row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
         row.alert = props.ps_is_dirty or props.ps_disk_conflict
         
         if props.ps_is_dirty:
@@ -214,10 +224,11 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row.alert = True
             row.label(text="Disk file changed! Save will overwrite.", icon='ERROR')
             
+        row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
 
         layout.separator()
+        
         # layout.operator("bpsd.debug_rw_test", icon='FILE_REFRESH', text="Debug RW Test")
-
 
 
 class BPSD_PT_layer_context(bpy.types.Panel):

@@ -215,11 +215,17 @@ class BPSD_OT_select_layer(bpy.types.Operator):
             focus_image_editor(context, existing_img)
 
         elif props.auto_load_on_select:
-            bpy.ops.bpsd.load_layer(
-                'EXEC_DEFAULT',
-                layer_path=self.path,
-                layer_id=self.layer_id
-            )
+            # Skip auto-load for Groups/Adjustment layers unless it's a mask
+            should_load = True
+            if item and item.layer_type in {'GROUP', 'ADJUSTMENT'} and not self.is_mask:
+                should_load = False
+            
+            if should_load:
+                bpy.ops.bpsd.load_layer(
+                    'EXEC_DEFAULT',
+                    layer_path=self.path,
+                    layer_id=self.layer_id
+                )
 
         return {'FINISHED'}
 
