@@ -268,6 +268,7 @@ class BPSD_OT_load_layer(bpy.types.Operator):
             img_name = f"{layer_name}_MASK" if is_mask else layer_name
 
             img = bpy.data.images.new(img_name, width=w, height=h, alpha=True)
+        else: img_name = target_layer
 
         if img.size[0] != w or img.size[1] != h:
             img.scale(w, h)
@@ -313,8 +314,10 @@ def perform_save_images(context, psd_path, images, property_items=None):
         
         # Include blend mode update if item exists (merging image save + prop save)
         b_mode = None
+        opac = None
         if item:
             b_mode = item.blend_mode
+            opac = item.opacity
 
         updates.append({
             'layer_path': layer_path,
@@ -323,7 +326,8 @@ def perform_save_images(context, psd_path, images, property_items=None):
             'height': img.size[1],
             'is_mask': is_mask,
             'layer_id': layer_id,
-            'blend_mode': b_mode
+            'blend_mode': b_mode,
+            'opacity': opac
         })
         valid_images.append(img)
     
@@ -344,7 +348,8 @@ def perform_save_images(context, psd_path, images, property_items=None):
                 'height': props.psd_height,
                 'is_mask': False,
                 'layer_id': item.layer_id,
-                'blend_mode': item.blend_mode
+                'blend_mode': item.blend_mode,
+                'opacity': item.opacity
             })
             valid_prop_items.append(item)
 

@@ -319,7 +319,7 @@ def _write_color_channels(layer, pixels, canvas_w, canvas_h):
         print(f"BPSD Write Union Error: {e}")
         return False
 
-def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask, layer_id=0, blend_mode=None):
+def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask, layer_id=0, blend_mode=None, opacity=None):
     layer = get_layer(layered_file, layer_id, layer_path)
     if not layer:
         print(f"Can't save {layer_path} (ID: {layer_id}) ?")
@@ -353,8 +353,11 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
             'LUMINOSITY': 'Luminosity',
         }
         target_attr = mode_map.get(blend_mode, 'Normal')
-        if hasattr(psapi.enums.BlendMode, target_attr):
-            layer.blend_mode = getattr(psapi.enums.BlendMode, target_attr)
+        if hasattr(psapi.BlendMode, target_attr):
+            layer.blend_mode = getattr(psapi.BlendMode, target_attr)
+
+    # if opacity is not None:
+        # layer.opacity = int(opacity * 255)
 
     if blender_pixels is not None:
         pixels = _prepare_blender_pixels(blender_pixels, canvas_w, canvas_h)
@@ -377,7 +380,8 @@ def write_all_layers(psd_path, updates, canvas_w, canvas_h):
             
             if write_to_layered_file(layered_file, data['layer_path'], pix,
                                    w, h, data['is_mask'], data.get('layer_id', 0),
-                                   blend_mode=data.get('blend_mode')):
+                                   blend_mode=data.get('blend_mode'),
+                                   opacity=data.get('opacity')):
                 count += 1
 
         if count > 0:

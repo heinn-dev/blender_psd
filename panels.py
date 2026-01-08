@@ -106,23 +106,34 @@ def draw_layer_panel(layout, props, item):
     icon = get_icon(item.layer_type)
     # row = box.row(align=True)
     # row.alignment = 'LEFT'
-    row = box.row()
+    # row = box.row()
+    # row.label(text=f"{item.name}", icon=icon)
     
     
-    row.label(text=f"{item.name}", icon=icon)
+        
+    col = box.column()
+    
+    row = col.row()
+    row.scale_y = 0.8
     
     sub_row = row.row(align=True)
+    sub_row.alignment = 'LEFT'
+    sub_row.prop(item, "blend_mode", text="")
     sub_row.separator()
-    sub_row.alignment = 'RIGHT'
     
     if item.layer_type == "LAYER":
+        sub_row = row.row(align=True)
+        sub_row.separator()
+        sub_row.alignment = 'RIGHT'
         op = sub_row.operator("bpsd.load_layer", text="", icon='FILE_REFRESH')
         op.layer_path = props.layer_list[props.active_layer_index].path
         op.layer_id = props.active_layer_index
     
-    row = box.row(align=True)
-    row.alignment = 'LEFT'
-    row.prop(item, "blend_mode", text="Blend Mode")
+    row = col.row()
+    # row.alignment = 'LEFT'
+    row.prop(item, "opacity", text="Opacity", slider=True)
+    row.scale_y = 0.8
+    
 
 class BPSD_PT_main_panel(bpy.types.Panel):
     bl_label = "Photoshop Sync"
@@ -199,6 +210,10 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 layout_stack.append(current_layout)
                 current_indent += 1
 
+        if props.active_layer_index >= 0 and props.active_layer_index < len(props.layer_list):
+            draw_layer_panel(layout, props, item)
+
+
         psd_name = props.active_psd_path.replace("\\", "/")
         psd_name = psd_name.split("/")[-1]
         
@@ -219,8 +234,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         icon_toggle = 'HIDE_OFF' if is_preview else 'NODETREE'
         row_hl.operator("bpsd.toggle_output_mode", text="", icon=icon_toggle, depress=is_preview)
 
-        if props.active_layer_index >= 0 and props.active_layer_index < len(props.layer_list):
-            draw_layer_panel(layout, props, item)
+
             
         layout.separator()
 

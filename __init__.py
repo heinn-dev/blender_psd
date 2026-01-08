@@ -31,7 +31,6 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     is_clipping_mask: bpy.props.BoolProperty(default=False) # type: ignore
     is_visible: bpy.props.BoolProperty(default=False) # type: ignore
     hidden_by_parent: bpy.props.BoolProperty(default=False) # type: ignore
-    opacity: bpy.props.FloatProperty(default=1.0) # type: ignore
     clip_base_index: bpy.props.IntProperty(default=-1) # type: ignore
     is_property_dirty: bpy.props.BoolProperty(default=False) # type: ignore
 
@@ -47,6 +46,21 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
             bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
         except:
             pass
+
+    def update_opacity(self, context):
+        if not context or not context.scene: return
+        props = context.scene.bpsd_props
+        
+        if props.is_applying_update: return
+
+        self.is_property_dirty = True
+
+        try:
+            bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        except:
+            pass
+
+    opacity: bpy.props.FloatProperty(default=1.0, min=0.0, max=1.0, update=update_opacity) # type: ignore
 
     def get_blend_mode_items(self, context):
         items = [
