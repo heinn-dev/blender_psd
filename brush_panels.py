@@ -172,7 +172,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
 
         row.prop(settings, "use_backface_culling", text="Backface", icon='MOD_SOLIDIFY')
         row.prop(settings, "use_occlude", text="Occlude", icon='XRAY')
-        row.prop(brush, "use_alpha", text="Paint Alpha", icon='LOCKED')
+        row.prop(brush, "use_alpha", text="Paint Alpha", icon='TEXTURE')
 
         row = layout.row(align=True)
         op = row.operator("bpsd.qb_brush_set", text="Eraser")

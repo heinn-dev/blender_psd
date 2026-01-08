@@ -92,6 +92,9 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
     last_known_mtime_str: bpy.props.StringProperty(default="0.0") # type: ignore
     structure_signature: bpy.props.StringProperty() # type: ignore
 
+    ps_is_dirty: bpy.props.BoolProperty(default=False) # type: ignore
+    ps_disk_conflict: bpy.props.BoolProperty(default=False) # type: ignore
+
     show_cat_math: bpy.props.BoolProperty(name="Math", default=True) # type: ignore
     show_cat_light: bpy.props.BoolProperty(name="Light", default=True) # type: ignore
     show_cat_color: bpy.props.BoolProperty(name="Color", default=True) # type: ignore
@@ -173,6 +176,7 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
 
         props.psd_width = w
         props.psd_height = h
+        props.ps_disk_conflict = False
 
         saved_overrides = {}
         for item in props.layer_list:
@@ -368,9 +372,11 @@ def auto_sync_check():
             if has_unsaved:
                 print("BPSD: Photoshop file updated, but Auto-Sync skipped due to unsaved changes in Blender.")
                 props.last_known_mtime_str = str(current_mtime)
+                props.ps_disk_conflict = True
                 return 1.0
 
             props.last_known_mtime_str = str(current_mtime)
+            props.ps_disk_conflict = False
 
             if context.window:
                 bpy.ops.bpsd.connect_psd('EXEC_DEFAULT')
@@ -379,6 +385,25 @@ def auto_sync_check():
         print(f"BPSD Watcher Error: {e}")
 
     return 1.0
+
+
+def ps_status_check():
+    context = bpy.context
+    if not context.scene: return 3.0
+
+    props = context.scene.bpsd_props
+    path = props.active_psd_path
+
+    if not path or not os.path.exists(path):
+        return 3.0
+
+    # Only check if we are actually connected
+    if props.active_psd_image != 'NONE':
+        is_dirty = ui_ops.is_photoshop_file_unsaved(path)
+        if is_dirty is not None:
+             props.ps_is_dirty = is_dirty
+
+    return 2.0
 
 
 classes = (
@@ -437,6 +462,7 @@ def register():
 
     bpy.app.timers.register(ui_ops.image_dirty_watcher, persistent=True)
     bpy.app.timers.register(auto_sync_check, persistent=True)
+    bpy.app.timers.register(ps_status_check, persistent=True)
     bpy.app.handlers.load_post.append(bpsd_load_post_handler)
 
 def unregister():
@@ -453,6 +479,11 @@ def unregister():
 
     try:
         bpy.app.timers.unregister(auto_sync_check)
+    except:
+        pass
+        
+    try:
+        bpy.app.timers.unregister(ps_status_check)
     except:
         pass
 

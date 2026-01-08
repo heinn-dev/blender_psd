@@ -315,6 +315,7 @@ def perform_save_images(context, psd_path, images):
     if success:
         if os.path.exists(psd_path):
             props.last_known_mtime_str = str(os.path.getmtime(psd_path))
+            props.ps_disk_conflict = False
 
         for img in valid_images:
             try:

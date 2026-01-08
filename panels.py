@@ -126,10 +126,9 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
         sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
 
-
         row = sync_col.row(align=True)
-        row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='FILE_REFRESH' if props.auto_sync_incoming else 'CANCEL')
-        row.prop(props, "auto_refresh_ps", text="Sync to PS", icon='FILE_REFRESH' if props.auto_refresh_ps else 'CANCEL')
+        row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='UV_SYNC_SELECT' if props.auto_sync_incoming else 'CANCEL')
+        row.prop(props, "auto_refresh_ps", text="Sync to PS", icon='UV_SYNC_SELECT' if props.auto_refresh_ps else 'CANCEL')
         row.enabled = is_valid
 
 
@@ -180,7 +179,19 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.prop(props, "use_closest_interpolation", text="", icon=icon_interp, toggle=True)
 
         row = layout.row(align=True)
+        
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
+        
+        if props.ps_is_dirty:
+            row = sync_col.row(align=True)
+            row.alert = True
+            row.label(text="Photoshop: Unsaved Changes", icon='ERROR')
+
+        if props.ps_disk_conflict:
+            row = sync_col.row(align=True)
+            row.alert = True
+            row.label(text="Disk file changed! Save will overwrite.", icon='ERROR')
+            
         row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
 
         layout.separator()
