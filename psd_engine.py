@@ -319,18 +319,52 @@ def _write_color_channels(layer, pixels, canvas_w, canvas_h):
         print(f"BPSD Write Union Error: {e}")
         return False
 
-def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask, layer_id=0):
+def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, canvas_h, is_mask, layer_id=0, blend_mode=None):
     layer = get_layer(layered_file, layer_id, layer_path)
     if not layer:
         print(f"Can't save {layer_path} (ID: {layer_id}) ?")
         return False
 
-    pixels = _prepare_blender_pixels(blender_pixels, canvas_w, canvas_h)
+    if blend_mode:
+        mode_map = {
+            'NORMAL': 'Normal',
+            'PASSTHROUGH': 'PassThrough',
+            'MULTIPLY': 'Multiply',
+            'SCREEN': 'Screen',
+            'OVERLAY': 'Overlay',
+            'DARKEN': 'Darken',
+            'LIGHTEN': 'Lighten',
+            'COLORDODGE': 'ColorDodge',
+            'COLORBURN': 'ColorBurn',
+            'LINEARBURN': 'LinearBurn',
+            'LINEARDODGE': 'LinearDodge',
+            'SOFTLIGHT': 'SoftLight',
+            'HARDLIGHT': 'HardLight',
+            'VIVIDLIGHT': 'VividLight',
+            'LINEARLIGHT': 'LinearLight',
+            'PINLIGHT': 'PinLight',
+            'DIFFERENCE': 'Difference',
+            'EXCLUSION': 'Exclusion',
+            'SUBTRACT': 'Subtract',
+            'DIVIDE': 'Divide',
+            'HUE': 'Hue',
+            'SATURATION': 'Saturation',
+            'COLOR': 'Color',
+            'LUMINOSITY': 'Luminosity',
+        }
+        target_attr = mode_map.get(blend_mode, 'Normal')
+        if hasattr(psapi.enums.BlendMode, target_attr):
+            layer.blend_mode = getattr(psapi.enums.BlendMode, target_attr)
 
-    if is_mask:
-        return _write_mask(layer, pixels, canvas_w, canvas_h)
-    else:
-        return _write_color_channels(layer, pixels, canvas_w, canvas_h)
+    if blender_pixels is not None:
+        pixels = _prepare_blender_pixels(blender_pixels, canvas_w, canvas_h)
+
+        if is_mask:
+            return _write_mask(layer, pixels, canvas_w, canvas_h)
+        else:
+            return _write_color_channels(layer, pixels, canvas_w, canvas_h)
+            
+    return True
 
 def write_all_layers(psd_path, updates, canvas_w, canvas_h):
     try:
@@ -339,9 +373,11 @@ def write_all_layers(psd_path, updates, canvas_w, canvas_h):
         for data in updates:
             w = data.get('width', canvas_w)
             h = data.get('height', canvas_h)
-
-            if write_to_layered_file(layered_file, data['layer_path'], data['pixels'],
-                                   w, h, data['is_mask'], data.get('layer_id', 0)):
+            pix = data.get('pixels')
+            
+            if write_to_layered_file(layered_file, data['layer_path'], pix,
+                                   w, h, data['is_mask'], data.get('layer_id', 0),
+                                   blend_mode=data.get('blend_mode')):
                 count += 1
 
         if count > 0:

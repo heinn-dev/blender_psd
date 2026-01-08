@@ -2,6 +2,17 @@ import bpy
 import os
 from . import ui_ops
 
+def get_icon(layer_type):
+    match layer_type:
+        case 'GROUP':
+            return 'FILE_FOLDER'
+        case 'SMART':
+            return 'OUTLINER_DATA_LATTICE'
+        case 'ADJUSTMENT':
+            return 'CURVE_DATA'
+        case 'UNKNOWN':
+            return 'FILE'
+    return 'IMAGE_DATA'
 
 def draw_layer_item(layout, props, item, index, current_indent):
     split = layout.split(factor=0.75)
@@ -15,17 +26,10 @@ def draw_layer_item(layout, props, item, index, current_indent):
     is_active_row = (index == props.active_layer_index)
 
     ind = current_indent
+    icon = get_icon(item.layer_type)
+    
     if item.layer_type == "GROUP":
-        icon = 'FILE_FOLDER'
         ind -= 1
-    elif item.layer_type == "SMART":
-        icon = 'OUTLINER_DATA_LATTICE'
-    elif item.layer_type == "ADJUSTMENT":
-        icon = 'CURVE_DATA'
-    elif item.layer_type == "UNKNOWN":
-        icon = 'FILE'
-    else:
-        icon = 'IMAGE_DATA'
 
     effective_vis = item.is_visible
     if item.visibility_override == 'SHOW': effective_vis = True
@@ -54,28 +58,30 @@ def draw_layer_item(layout, props, item, index, current_indent):
     if not has_unsaved and item.has_mask:
         img_m = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
         if img_m and img_m.is_dirty: has_unsaved = True
+        
+    has_unsaved = has_unsaved or item.is_property_dirty
 
     if has_unsaved:
         display_name += " *"
 
-    if item.layer_type in {"GROUP", "ADJUSTMENT", "UNKNOWN"}:
-        layer_sub = row.row(align=True)
-        layer_sub.alignment = 'LEFT'
-        op = layer_sub.operator( "bpsd.select_layer", text=display_name, icon=icon, emboss=False )
-        op.index = index
-        op.path = item.path
-        op.layer_id = item.layer_id
-        op.is_mask = False
-    else:
-        layer_sub = row.row(align=True)
-        layer_sub.alert = (is_active_row and not props.active_is_mask)
-        layer_sub.alignment = 'LEFT'
+    # if item.layer_type in {"GROUP", "ADJUSTMENT", "UNKNOWN"}:
+    #     layer_sub = row.row(align=True)
+    #     layer_sub.alignment = 'LEFT'
+    #     op = layer_sub.operator( "bpsd.select_layer", text=display_name, icon=icon, emboss=False )
+    #     op.index = index
+    #     op.path = item.path
+    #     op.layer_id = item.layer_id
+    #     op.is_mask = False
+    # else:
+    layer_sub = row.row(align=True)
+    layer_sub.alert = (is_active_row and not props.active_is_mask)
+    layer_sub.alignment = 'LEFT'
 
-        op = layer_sub.operator( "bpsd.select_layer", text=display_name, icon=icon, emboss=False )
-        op.index = index
-        op.path = item.path
-        op.layer_id = item.layer_id
-        op.is_mask = False
+    op = layer_sub.operator( "bpsd.select_layer", text=display_name, icon=icon, emboss=False )
+    op.index = index
+    op.path = item.path
+    op.layer_id = item.layer_id
+    op.is_mask = False
 
 
     if item.has_mask:
@@ -97,8 +103,13 @@ def draw_layer_item(layout, props, item, index, current_indent):
 def draw_layer_panel(layout, props, item):
     item = props.layer_list[props.active_layer_index]
     box = layout.box()
-    box.label(text=f"{item.name} ({item.layer_type})", icon='PREFERENCES')
-    box.prop(item, "blend_mode", text="Blend Mode")
+
+    icon = get_icon(item.layer_type)
+    
+    box.label(text=f"{item.name}", icon=icon)
+    row = box.row(align=True)
+    row.alignment = 'RIGHT'
+    row.prop(item, "blend_mode", text="Blend Mode")
 
 class BPSD_PT_main_panel(bpy.types.Panel):
     bl_label = "Photoshop Sync"
@@ -210,6 +221,14 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row = layout.row(align=True)
         
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
+        row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
+        
+        # has_dirty_props = False
+        # for item in props.layer_list:
+        #     if item.is_property_dirty:
+        #         has_dirty_props = True
+        #         break
+        
         row.alert = props.ps_is_dirty or props.ps_disk_conflict
         
         if props.ps_is_dirty:
@@ -224,7 +243,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row.alert = True
             row.label(text="Disk file changed! Save will overwrite.", icon='ERROR')
             
-        row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
 
         layout.separator()
         

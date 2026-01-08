@@ -33,8 +33,16 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     hidden_by_parent: bpy.props.BoolProperty(default=False) # type: ignore
     opacity: bpy.props.FloatProperty(default=1.0) # type: ignore
     clip_base_index: bpy.props.IntProperty(default=-1) # type: ignore
+    is_property_dirty: bpy.props.BoolProperty(default=False) # type: ignore
 
     def update_blend_mode(self, context):
+        if not context or not context.scene: return
+        props = context.scene.bpsd_props
+        
+        if props.is_applying_update: return
+
+        self.is_property_dirty = True
+
         try:
             bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
         except:
@@ -138,6 +146,7 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
 
     ps_is_dirty: bpy.props.BoolProperty(default=False) # type: ignore
     ps_disk_conflict: bpy.props.BoolProperty(default=False) # type: ignore
+    is_applying_update: bpy.props.BoolProperty(default=False) # type: ignore
 
     show_cat_math: bpy.props.BoolProperty(name="Math", default=True) # type: ignore
     show_cat_light: bpy.props.BoolProperty(name="Light", default=True) # type: ignore
@@ -233,31 +242,36 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
         saved_active_is_mask = props.active_is_mask
 
         props.layer_list.clear()
-        self.flatten_tree(tree_data, props.layer_list, indent=0)
+        
+        props.is_applying_update = True
+        try:
+            self.flatten_tree(tree_data, props.layer_list, indent=0)
 
-        indent_map = {}
-        for i in range(len(props.layer_list) - 1, -1, -1):
-            item = props.layer_list[i]
+            indent_map = {}
+            for i in range(len(props.layer_list) - 1, -1, -1):
+                item = props.layer_list[i]
 
-            if item.is_clipping_mask:
-                if item.indent in indent_map:
-                    item.clip_base_index = indent_map[item.indent]
-            else:
-                indent_map[item.indent] = i
+                if item.is_clipping_mask:
+                    if item.indent in indent_map:
+                        item.clip_base_index = indent_map[item.indent]
+                else:
+                    indent_map[item.indent] = i
 
-        sig_parts = []
-        for item in props.layer_list:
-            part = f"{item.layer_id}:{item.layer_type}:{item.indent}:{item.is_clipping_mask}:{item.has_mask}:{item.clip_base_index}"
+            sig_parts = []
+            for item in props.layer_list:
+                part = f"{item.layer_id}:{item.layer_type}:{item.indent}:{item.is_clipping_mask}:{item.has_mask}:{item.clip_base_index}"
 
-            if item.layer_type == 'GROUP':
-                part += f":{item.blend_mode}"
+                if item.layer_type == 'GROUP':
+                    part += f":{item.blend_mode}"
 
-            sig_parts.append(part)
-        props.structure_signature = "|".join(sig_parts)
+                sig_parts.append(part)
+            props.structure_signature = "|".join(sig_parts)
 
-        for item in props.layer_list:
-            if item.layer_id in saved_overrides:
-                item.visibility_override = saved_overrides[item.layer_id]
+            for item in props.layer_list:
+                if item.layer_id in saved_overrides:
+                    item.visibility_override = saved_overrides[item.layer_id]
+        finally:
+            props.is_applying_update = False
 
         props.active_layer_index = -1
         props.active_layer_path = ""

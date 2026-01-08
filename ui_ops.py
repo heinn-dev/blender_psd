@@ -285,12 +285,13 @@ class BPSD_OT_load_layer(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def perform_save_images(context, psd_path, images):
+def perform_save_images(context, psd_path, images, property_items=None):
     props = context.scene.bpsd_props
 
     updates = []
     valid_images = []
 
+    # Process Dirty Images
     for img in images:
         layer_path = img.get("psd_layer_path")
         is_mask = img.get("psd_is_mask", False)
@@ -309,6 +310,11 @@ def perform_save_images(context, psd_path, images):
         if item and item.layer_type == 'SMART' and not is_mask:
             print(f"Skipping save for Smart Object content: {item.name}")
             continue
+        
+        # Include blend mode update if item exists (merging image save + prop save)
+        b_mode = None
+        if item:
+            b_mode = item.blend_mode
 
         updates.append({
             'layer_path': layer_path,
@@ -316,13 +322,36 @@ def perform_save_images(context, psd_path, images):
             'width': img.size[0],
             'height': img.size[1],
             'is_mask': is_mask,
-            'layer_id': layer_id
+            'layer_id': layer_id,
+            'blend_mode': b_mode
         })
         valid_images.append(img)
+    
+    # Process Property-Only Updates (for items not in the images list)
+    # property_items is a list of BPSD_LayerItem
+    valid_prop_items = []
+    if property_items:
+        processed_layer_ids = {u['layer_id'] for u in updates}
+        
+        for item in property_items:
+            if item.layer_id in processed_layer_ids:
+                continue # Already handled via image save
+            
+            updates.append({
+                'layer_path': item.path,
+                'pixels': None, # Property only
+                'width': props.psd_width,
+                'height': props.psd_height,
+                'is_mask': False,
+                'layer_id': item.layer_id,
+                'blend_mode': item.blend_mode
+            })
+            valid_prop_items.append(item)
 
     if not updates:
-        return {'CANCELLED'}, "No images to save."
+        return {'CANCELLED'}, "No changes to save."
 
+    # Use first available width/height if generic
     canvas_w = updates[0]['width']
     canvas_h = updates[0]['height']
 
@@ -339,6 +368,17 @@ def perform_save_images(context, psd_path, images):
                 runtime_state.set_dirty(img.name, False)
             except Exception as e:
                 print(f"Error packing {img.name}: {e}")
+        
+        for item in valid_prop_items:
+            item.is_property_dirty = False
+        
+        # Also clear property dirty flag for items that were saved via image
+        for img in valid_images:
+            l_id = img.get("psd_layer_id", 0)
+            if l_id > 0:
+                for item in props.layer_list:
+                    if item.layer_id == l_id:
+                        item.is_property_dirty = False
 
         msg = "Saved to disk."
         status = {'FINISHED'}
@@ -387,8 +427,27 @@ class BPSD_OT_save_layer(bpy.types.Operator):
         if not img.get("psd_layer_path"):
             self.report({'ERROR'}, "Image is not linked to a PSD layer.")
             return {'CANCELLED'}
+            
+        # Find corresponding item to force save its properties too
+        target_item = None
+        l_id = img.get("psd_layer_id", 0)
+        l_path = img.get("psd_layer_path")
+        
+        props = context.scene.bpsd_props
+        if l_id > 0:
+            for item in props.layer_list:
+                if item.layer_id == l_id:
+                    target_item = item
+                    break
+        elif l_path:
+             for item in props.layer_list:
+                if item.path == l_path:
+                    target_item = item
+                    break
 
-        status, msg = perform_save_images(context, psd_path, [img])
+        prop_list = [target_item] if target_item else None
+
+        status, msg = perform_save_images(context, psd_path, [img], property_items=prop_list)
 
         if 'CANCELLED' in status:
             self.report({'ERROR'}, msg)
@@ -431,16 +490,23 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
                 continue
 
             images_to_save.append(img)
+            
+        # Collect dirty properties
+        dirty_props = []
+        for item in props.layer_list:
+            if self.force or item.is_property_dirty:
+                dirty_props.append(item)
 
-        if not images_to_save:
+        if not images_to_save and not dirty_props:
             msg = "No layers loaded." if self.force else "No unsaved changes found."
             self.report({'INFO'}, msg)
             return {'CANCELLED'}
 
         action = "Force saving" if self.force else "Batch saving"
-        self.report({'INFO'}, f"{action} {len(images_to_save)} layers...")
+        count_str = f"{len(images_to_save)} images, {len(dirty_props)} properties"
+        self.report({'INFO'}, f"{action} {count_str}...")
 
-        status, msg = perform_save_images(context, active_psd, images_to_save)
+        status, msg = perform_save_images(context, active_psd, images_to_save, property_items=dirty_props)
 
         if 'CANCELLED' in status:
             self.report({'ERROR'}, msg)
