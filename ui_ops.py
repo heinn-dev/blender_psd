@@ -229,11 +229,11 @@ class BPSD_OT_select_layer(bpy.types.Operator):
 
         return {'FINISHED'}
 
-
+# make it so reloading something other than a normal layer just changes properties or whatever
 class BPSD_OT_load_layer(bpy.types.Operator):
     bl_idname = "bpsd.load_layer"
     bl_label = "Load Layer"
-    bl_description = "Load this PSD layer into a Blender Image"
+    bl_description = "Load this PSD layer from disk"
     bl_options = {'REGISTER', 'UNDO'}
 
     layer_path: bpy.props.StringProperty() # type: ignore

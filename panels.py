@@ -83,7 +83,6 @@ def draw_layer_item(layout, props, item, index, current_indent):
     op.layer_id = item.layer_id
     op.is_mask = False
 
-
     if item.has_mask:
         mask_sub = row.row(align=True)
         mask_sub.alert = (is_active_row and props.active_is_mask)
@@ -105,10 +104,24 @@ def draw_layer_panel(layout, props, item):
     box = layout.box()
 
     icon = get_icon(item.layer_type)
+    # row = box.row(align=True)
+    # row.alignment = 'LEFT'
+    row = box.row()
     
-    box.label(text=f"{item.name}", icon=icon)
+    
+    row.label(text=f"{item.name}", icon=icon)
+    
+    sub_row = row.row(align=True)
+    sub_row.separator()
+    sub_row.alignment = 'RIGHT'
+    
+    if item.layer_type == "LAYER":
+        op = sub_row.operator("bpsd.load_layer", text="", icon='FILE_REFRESH')
+        op.layer_path = props.layer_list[props.active_layer_index].path
+        op.layer_id = props.active_layer_index
+    
     row = box.row(align=True)
-    row.alignment = 'RIGHT'
+    row.alignment = 'LEFT'
     row.prop(item, "blend_mode", text="Blend Mode")
 
 class BPSD_PT_main_panel(bpy.types.Panel):
