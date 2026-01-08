@@ -168,7 +168,23 @@ class BPSD_PT_main_panel(bpy.types.Panel):
 
         psd_name = props.active_psd_path.replace("\\", "/")
         psd_name = psd_name.split("/")[-1]
-        layout.box().operator("bpsd.highlight_psd", text=f"{psd_name}", icon='IMAGE_DATA',emboss=False)
+        
+        row_hl = layout.box().row(align=True)
+        row_hl.operator("bpsd.highlight_psd", text=f"{psd_name}", icon='IMAGE_DATA',emboss=False)
+        
+        # Check current state for icon/depress
+        is_preview = False
+        ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+        if ng:
+             for node in ng.nodes:
+                if node.get("bpsd_output_toggle"):
+                    if node.inputs['Factor'].default_value > 0.5:
+                        is_preview = True
+                    break
+
+        icon_toggle = 'HIDE_OFF' if is_preview else 'NODETREE'
+        row_hl.operator("bpsd.toggle_output_mode", text="", icon=icon_toggle, depress=is_preview)
+
         layout.separator()
 
         row = layout.row(align=True)
@@ -183,12 +199,14 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
         
         if props.ps_is_dirty:
-            row = sync_col.row(align=True)
+            warn = layout.column()
+            row = warn.row(align=True)
             row.alert = True
             row.label(text="Photoshop: Unsaved Changes", icon='ERROR')
 
         if props.ps_disk_conflict:
-            row = sync_col.row(align=True)
+            if warn == None: warn = layout.column()
+            row = warn.row(align=True)
             row.alert = True
             row.label(text="Disk file changed! Save will overwrite.", icon='ERROR')
             

@@ -117,45 +117,73 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
 
         catbox = layout.box()
 
-        for cat_name, items in cats_to_draw:
-            if not items: continue
-            t = 0
-            for mode_key in items:
-                data = self.blend_map[mode_key]
-                tags = data[2]
-                if not props.show_frequent_only or mode_key in frequent_list:
-                    t += 1
-            if t == 0: continue
-
+        if props.show_frequent_only:
             col = catbox.column(align=True)
             col.scale_y = 0.8
-            col.alignment ="LEFT"
+            col.alignment = "LEFT"
 
-            c = 0
-            for mode_key in items:
+            valid_items = []
+            seen = set()
+            for cat_name, items in cats_to_draw:
+                for mode_key in items:
+                    if mode_key in frequent_list and mode_key not in seen:
+                        valid_items.append((mode_key, cat_name))
+                        seen.add(mode_key)
+
+            prev_cat = None
+            row = None
+            
+            for i, (mode_key, cat_name) in enumerate(valid_items):
+                if i % 4 == 0:
+                    row = col.row(align=True)
+                    row.alignment = "LEFT"
+                elif prev_cat is not None and cat_name != prev_cat:
+                    if i % 4 != 3:
+                        row.separator()
+                
+                prev_cat = cat_name
 
                 data = self.blend_map[mode_key]
-                tags = data[2]
-
-                if props.show_frequent_only and mode_key not in frequent_list:
-                    continue
-
-                if c % 4 == 0:
-                    row = col.row(align = True)
-                    row.alignment = "LEFT"
-
-                c += 1
-
                 display_text = data[0]
                 display_icon = data[1]
                 is_active = (brush.blend == mode_key)
 
-                sub = row.row(align = True)
+                sub = row.row(align=True)
                 sub.alignment = "LEFT"
                 op = sub.operator("bpsd.qb_brush_blend", text=display_text, icon=display_icon, depress=is_active)
                 op.blend_mode = mode_key
-
+            
             col.separator(factor=.5)
+
+        else:
+            for cat_name, items in cats_to_draw:
+                if not items: continue
+
+                col = catbox.column(align=True)
+                col.scale_y = 0.8
+                col.alignment ="LEFT"
+
+                c = 0
+                for mode_key in items:
+
+                    data = self.blend_map[mode_key]
+
+                    if c % 4 == 0:
+                        row = col.row(align = True)
+                        row.alignment = "LEFT"
+
+                    c += 1
+
+                    display_text = data[0]
+                    display_icon = data[1]
+                    is_active = (brush.blend == mode_key)
+
+                    sub = row.row(align = True)
+                    sub.alignment = "LEFT"
+                    op = sub.operator("bpsd.qb_brush_blend", text=display_text, icon=display_icon, depress=is_active)
+                    op.blend_mode = mode_key
+
+                # col.separator(factor=.5)
 
         layout.separator()
 

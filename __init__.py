@@ -296,7 +296,7 @@ class BPSD_OT_stop_sync(bpy.types.Operator):
 class BPSD_OT_highlight_psd(bpy.types.Operator):
     bl_idname = "bpsd.highlight_psd"
     bl_label = "Highlight PSD"
-    bl_description = "Toggle between composited layers and PSD preview in the node output"
+    bl_description = "Show the PSD file in the Image Editor"
 
     def execute(self, context):
         props = context.scene.bpsd_props
@@ -310,6 +310,18 @@ class BPSD_OT_highlight_psd(bpy.types.Operator):
             self.report({'ERROR'}, "Image not found.")
             return {'CANCELLED'}
 
+        ui_ops.focus_image_editor(context, img)
+        props.active_layer_index = -1
+
+        return {'FINISHED'}
+
+
+class BPSD_OT_toggle_output_mode(bpy.types.Operator):
+    bl_idname = "bpsd.toggle_output_mode"
+    bl_label = "Toggle Output"
+    bl_description = "Toggle between Composited Output and raw PSD Preview"
+
+    def execute(self, context):
         ng = bpy.data.node_groups.get("BPSD_PSD_Output")
         if ng:
             for node in ng.nodes:
@@ -319,10 +331,9 @@ class BPSD_OT_highlight_psd(bpy.types.Operator):
                     mode = "PSD Preview" if node.inputs['Factor'].default_value > 0.5 else "Composited"
                     self.report({'INFO'}, f"Output: {mode}")
                     break
-
-        ui_ops.focus_image_editor(context, img)
-        props.active_layer_index = -1
-
+        else:
+             self.report({'WARNING'}, "Node Group not found.")
+        
         return {'FINISHED'}
 
 
@@ -413,6 +424,7 @@ classes = (
     BPSD_OT_connect_psd,
     BPSD_OT_stop_sync,
     BPSD_OT_highlight_psd,
+    BPSD_OT_toggle_output_mode,
     ui_ops.BPSD_OT_select_layer,
     ui_ops.BPSD_OT_load_layer,
     ui_ops.BPSD_OT_save_layer,
