@@ -10,6 +10,12 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
+        
+        if context.mode != 'PAINT_TEXTURE': return False
+        
+        if bpy.app.version >= (5, 0, 0):
+            return False
+
         package_name = __package__
         try:
             prefs = context.preferences.addons[package_name].preferences
