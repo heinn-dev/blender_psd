@@ -118,7 +118,7 @@ def draw_layer_panel(layout, props, item):
     sub_row.alignment = 'LEFT'
     sub_row.prop(item, "blend_mode", text="")
     sub_row.separator()
-    sub_row.enabled = False
+    # sub_row.enabled = False
     
     if item.layer_type == "LAYER":
         sub_row = row.row(align=True)

@@ -30,6 +30,8 @@ def read_file(path):
                 layer_type = "UNKNOWN"
                 layer_name = "UNKNOWN"
 
+            print(layer.blend_mode)
+
             node = {
                 "name": layer_name,
                 "path": index_path,
@@ -44,8 +46,8 @@ def read_file(path):
                 "children": []
             }
 
-            if layer_type == "LAYER":
-                print(f"Layer {layer_name} has compression {str(layer.compression)}")
+            # if layer_type == "LAYER":
+                # print(f"Layer {layer_name} has compression {str(layer.compression)}")
 
             if is_group:
                 is_effectively_visible = parent_visible and layer.is_visible
@@ -326,35 +328,37 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
         return False
 
     if blend_mode:
+        # euuoghghghh
+        BM = type(layer.blend_mode)
+        
         mode_map = {
-            'NORMAL': 'Normal',
-            'PASSTHROUGH': 'PassThrough',
-            'MULTIPLY': 'Multiply',
-            'SCREEN': 'Screen',
-            'OVERLAY': 'Overlay',
-            'DARKEN': 'Darken',
-            'LIGHTEN': 'Lighten',
-            'COLORDODGE': 'ColorDodge',
-            'COLORBURN': 'ColorBurn',
-            'LINEARBURN': 'LinearBurn',
-            'LINEARDODGE': 'LinearDodge',
-            'SOFTLIGHT': 'SoftLight',
-            'HARDLIGHT': 'HardLight',
-            'VIVIDLIGHT': 'VividLight',
-            'LINEARLIGHT': 'LinearLight',
-            'PINLIGHT': 'PinLight',
-            'DIFFERENCE': 'Difference',
-            'EXCLUSION': 'Exclusion',
-            'SUBTRACT': 'Subtract',
-            'DIVIDE': 'Divide',
-            'HUE': 'Hue',
-            'SATURATION': 'Saturation',
-            'COLOR': 'Color',
-            'LUMINOSITY': 'Luminosity',
+            'NORMAL': BM.normal,
+            'PASSTHROUGH': BM.passthrough,
+            'MULTIPLY': BM.multiply,
+            'SCREEN': BM.screen,
+            'OVERLAY': BM.overlay,
+            'DARKEN': BM.darken,
+            'LIGHTEN': BM.lighten,
+            'COLORDODGE': BM.colordodge,
+            'COLORBURN': BM.colorburn,
+            'LINEARBURN': BM.linearburn,
+            'LINEARDODGE': BM.lineardodge,
+            'SOFTLIGHT': BM.softlight,
+            'HARDLIGHT': BM.hardlight,
+            'VIVIDLIGHT': BM.vividlight,
+            'LINEARLIGHT': BM.linearlight,
+            'PINLIGHT': BM.pinlight,
+            'DIFFERENCE': BM.difference,
+            'EXCLUSION': BM.exclusion,
+            'SUBTRACT': BM.subtract,
+            'DIVIDE': BM.divide,
+            'HUE': BM.hue,
+            'SATURATION': BM.saturation,
+            'COLOR': BM.color,
+            'LUMINOSITY': BM.luminosity,
         }
-        target_attr = mode_map.get(blend_mode, 'Normal')
-        # if hasattr(psapi.BlendMode, target_attr):
-            # layer.blend_mode = getattr(psapi.BlendMode, target_attr)
+        target_val = mode_map.get(blend_mode, BM.normal)
+        layer.blend_mode = target_val
 
     # if opacity is not None:
         # layer.opacity = int(opacity * 255)
