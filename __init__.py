@@ -12,7 +12,7 @@ bl_info = {
 
 import os
 import bpy
-from bpy.app.handlers import persistent
+from bpy.app.handlers import persistent # type: ignore
 
 from . import psd_engine
 from . import ui_ops
@@ -238,7 +238,8 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             if main_img:
                 main_img.reload()
 
-        ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+        target_group_name = ui_ops.get_psd_group_name(props.active_psd_path)
+        ng = bpy.data.node_groups.get(target_group_name)
         if ng:
             stored_sig = ng.get("bpsd_structure_signature", "")
 
@@ -322,7 +323,9 @@ class BPSD_OT_toggle_output_mode(bpy.types.Operator):
     bl_description = "Toggle between Composited Output and raw PSD Preview"
 
     def execute(self, context):
-        ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+        props = context.scene.bpsd_props
+        target_group_name = ui_ops.get_psd_group_name(props.active_psd_path)
+        ng = bpy.data.node_groups.get(target_group_name)
         if ng:
             for node in ng.nodes:
                 if node.get("bpsd_output_toggle"):

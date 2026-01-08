@@ -70,6 +70,11 @@ def tag_image(image, psd_path, layer_path, layer_index, is_mask=False, layer_id=
     image["psd_layer_id"] = layer_id
     image["bpsd_managed"] = True
 
+def get_psd_group_name(psd_path):
+    if not psd_path: return "BPSD_PSD_Output"
+    name = os.path.basename(psd_path)
+    return f"PSD: {name}"
+
 def find_loaded_image(psd_path, layer_index, is_mask, layer_id=0):
     for img in bpy.data.images:
         if img.get("psd_path") != psd_path: continue
@@ -107,7 +112,12 @@ def focus_image_editor(context, image):
                     break
 
             if not target_node:
-                ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+                p_path = image.get("psd_path")
+                if not p_path:
+                     p_path = bpy.path.abspath(image.filepath)
+
+                target_group_name = get_psd_group_name(p_path)
+                ng = bpy.data.node_groups.get(target_group_name)
                 if ng:
                     for node in ng.nodes:
                         if node.type == 'TEX_IMAGE' and node.image == image:

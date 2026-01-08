@@ -513,7 +513,7 @@ class BPSD_OT_create_psd_nodes(bpy.types.Operator):
 
         bpy.ops.bpsd.load_all_layers('EXEC_DEFAULT')
 
-        group_name = "BPSD_PSD_Output"
+        group_name = ui_ops.get_psd_group_name(props.active_psd_path)
         ng = bpy.data.node_groups.get(group_name)
 
         obj = context.active_object
@@ -731,9 +731,10 @@ class BPSD_OT_update_psd_nodes(bpy.types.Operator):
     def execute(self, context):
         props = context.scene.bpsd_props
 
-        ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+        group_name = ui_ops.get_psd_group_name(props.active_psd_path)
+        ng = bpy.data.node_groups.get(group_name)
         if not ng:
-            self.report({'ERROR'}, "PSD Node Group 'BPSD_PSD_Output' not found.")
+            self.report({'ERROR'}, f"PSD Node Group '{group_name}' not found.")
             return {'CANCELLED'}
 
         stored_sig = ng.get("bpsd_structure_signature", "")

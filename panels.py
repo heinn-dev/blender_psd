@@ -116,6 +116,11 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 synced_path = os.path.normpath(props.active_psd_path)
                 is_already_synced = (selected_path == synced_path)
 
+        if is_valid and props.active_psd_path:
+            sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
+        else:
+            sync_col.label(text="No file synced", icon='FILE')
+            
         row = sync_col.row(align=True)
         button_text = "Reload from disk" if is_already_synced else "Sync file"
         row.operator("bpsd.connect_psd", icon='FILE_REFRESH', text=button_text)
@@ -123,20 +128,16 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row.operator("bpsd.stop_sync", icon='X')
         row.enabled = is_valid
 
-
-        sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
-
         row = sync_col.row(align=True)
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='UV_SYNC_SELECT' if props.auto_sync_incoming else 'CANCEL')
         row.prop(props, "auto_refresh_ps", text="Sync to PS", icon='UV_SYNC_SELECT' if props.auto_refresh_ps else 'CANCEL')
         row.enabled = is_valid
 
-
         if not is_valid: return
         if len(props.layer_list) == 0: return
 
         layout.separator()
-        layout.label(text="Layers", icon ="RENDERLAYERS")
+        # layout.label(text="Layers", icon ="RENDERLAYERS")
 
         root_box = layout.box()
         root_col = root_box.column(align=True)
@@ -174,7 +175,8 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         
         # Check current state for icon/depress
         is_preview = False
-        ng = bpy.data.node_groups.get("BPSD_PSD_Output")
+        target_group_name = ui_ops.get_psd_group_name(props.active_psd_path)
+        ng = bpy.data.node_groups.get(target_group_name)
         if ng:
              for node in ng.nodes:
                 if node.get("bpsd_output_toggle"):
@@ -197,12 +199,14 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row = layout.row(align=True)
         
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
+        row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
+        row.alert = props.ps_is_dirty or props.ps_disk_conflict
         
         if props.ps_is_dirty:
             warn = layout.column()
             row = warn.row(align=True)
             row.alert = True
-            row.label(text="Photoshop: Unsaved Changes", icon='ERROR')
+            row.label(text="Photoshop has unsaved changes!", icon='ERROR')
 
         if props.ps_disk_conflict:
             if warn == None: warn = layout.column()
@@ -210,7 +214,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row.alert = True
             row.label(text="Disk file changed! Save will overwrite.", icon='ERROR')
             
-        row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
 
         layout.separator()
         # layout.operator("bpsd.debug_rw_test", icon='FILE_REFRESH', text="Debug RW Test")

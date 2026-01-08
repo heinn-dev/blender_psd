@@ -5,7 +5,7 @@ class BPSD_OT_qb_brush_blend(bpy.types.Operator):
     bl_label = "MIX"
     bl_options = {'REGISTER', 'UNDO'}
 
-    blend_mode: bpy.props.StringProperty()
+    blend_mode: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
         bpy.context.tool_settings.image_paint.brush.blend = self.blend_mode
@@ -24,7 +24,7 @@ class BPSD_OT_qb_brush_falloff(bpy.types.Operator):
     bl_label = ""
     bl_description = "Set falloff for brush"
 
-    falloff_mode: bpy.props.StringProperty()
+    falloff_mode: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
         if context.image_paint_object:
@@ -40,7 +40,7 @@ class BPSD_OT_qb_brush_set(bpy.types.Operator):
     bl_label = ""
     bl_description = "Set brush settings"
 
-    brush_mode: bpy.props.StringProperty()
+    brush_mode: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
         if self.brush_mode == "PAINT":
