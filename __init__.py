@@ -31,9 +31,53 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     is_clipping_mask: bpy.props.BoolProperty(default=False) # type: ignore
     is_visible: bpy.props.BoolProperty(default=False) # type: ignore
     hidden_by_parent: bpy.props.BoolProperty(default=False) # type: ignore
-    blend_mode: bpy.props.StringProperty(default="NORMAL") # type: ignore
     opacity: bpy.props.FloatProperty(default=1.0) # type: ignore
     clip_base_index: bpy.props.IntProperty(default=-1) # type: ignore
+
+    def update_blend_mode(self, context):
+        try:
+            bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        except:
+            pass
+
+    def get_blend_mode_items(self, context):
+        items = [
+            ('NORMAL', "Normal", ""),
+            ('MULTIPLY', "Multiply", ""),
+            ('SCREEN', "Screen", ""),
+            ('OVERLAY', "Overlay", ""),
+            ('DARKEN', "Darken", ""),
+            ('LIGHTEN', "Lighten", ""),
+            ('COLORDODGE', "Color Dodge", ""),
+            ('COLORBURN', "Color Burn", ""),
+            ('LINEARBURN', "Linear Burn", ""),
+            ('LINEARDODGE', "Linear Dodge (Add)", ""),
+            ('SOFTLIGHT', "Soft Light", ""),
+            ('HARDLIGHT', "Hard Light", ""),
+            ('VIVIDLIGHT', "Vivid Light", ""),
+            ('LINEARLIGHT', "Linear Light", ""),
+            ('PINLIGHT', "Pin Light", ""),
+            ('DIFFERENCE', "Difference", ""),
+            ('EXCLUSION', "Exclusion", ""),
+            ('SUBTRACT', "Subtract", ""),
+            ('DIVIDE', "Divide", ""),
+            ('HUE', "Hue", ""),
+            ('SATURATION', "Saturation", ""),
+            ('COLOR', "Color", ""),
+            ('LUMINOSITY', "Luminosity", ""),
+        ]
+
+        if self.layer_type == 'GROUP':
+            items.insert(1, ('PASSTHROUGH', "Pass Through", ""))
+
+        return items
+
+    blend_mode: bpy.props.EnumProperty(
+        name="Blend Mode",
+        items=get_blend_mode_items,
+        default=0,
+        update=update_blend_mode
+    ) # type: ignore
 
     visibility_override: bpy.props.EnumProperty(
         name="Visibility Override",
@@ -270,7 +314,7 @@ class BPSD_OT_connect_psd(bpy.types.Operator):
             item.is_clipping_mask = node['is_clipping_mask']
             item.is_visible = node['is_visible']
             item.hidden_by_parent = node.get('hidden_by_parent', False)
-            item.blend_mode = node.get('blend_mode', 'NORMAL')
+            item.blend_mode = node.get('blend_mode', 'NORMAL').upper()
             item.opacity = node.get('opacity', 1.0)
 
             if node['children']:
