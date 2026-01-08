@@ -109,8 +109,6 @@ def draw_layer_panel(layout, props, item):
     # row = box.row()
     # row.label(text=f"{item.name}", icon=icon)
     
-    
-        
     col = box.column()
     
     row = col.row()
@@ -120,6 +118,7 @@ def draw_layer_panel(layout, props, item):
     sub_row.alignment = 'LEFT'
     sub_row.prop(item, "blend_mode", text="")
     sub_row.separator()
+    sub_row.enabled = False
     
     if item.layer_type == "LAYER":
         sub_row = row.row(align=True)
@@ -167,8 +166,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         if is_already_synced:
             row.operator("bpsd.stop_sync", icon='X')
         row.enabled = is_valid
-
-
 
         row = sync_col.row(align=True)
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='UV_SYNC_SELECT' if props.auto_sync_incoming else 'CANCEL')

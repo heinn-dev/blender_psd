@@ -353,8 +353,8 @@ def write_to_layered_file(layered_file, layer_path, blender_pixels, canvas_w, ca
             'LUMINOSITY': 'Luminosity',
         }
         target_attr = mode_map.get(blend_mode, 'Normal')
-        if hasattr(psapi.BlendMode, target_attr):
-            layer.blend_mode = getattr(psapi.BlendMode, target_attr)
+        # if hasattr(psapi.BlendMode, target_attr):
+            # layer.blend_mode = getattr(psapi.BlendMode, target_attr)
 
     # if opacity is not None:
         # layer.opacity = int(opacity * 255)
