@@ -159,6 +159,10 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
     structure_signature: bpy.props.StringProperty() # type: ignore
 
     ps_is_dirty: bpy.props.BoolProperty(default=False) # type: ignore
+    last_known_ps_dirty_state: bpy.props.BoolProperty(
+        default=False,
+        options={'SKIP_SAVE'}
+    ) # type: ignore
     ps_disk_conflict: bpy.props.BoolProperty(default=False) # type: ignore
     is_applying_update: bpy.props.BoolProperty(default=False) # type: ignore
 
