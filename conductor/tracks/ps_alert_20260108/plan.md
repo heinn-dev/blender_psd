@@ -2,7 +2,7 @@
 
 ## Phase 1: State Persistence & Interop Foundation
 - [x] Task: Create a new JSX script `interop/alert.jsx` that accepts an alert message and displays a modal in Photoshop. [commit: ff721fb]
-- [ ] Task: Update `interop/check_status.vbs` (and `.scpt`) to accept an optional argument for triggering the alert, which calls the new JSX logic.
+- [x] Task: Update `interop/check_status.vbs` (and `.scpt`) to accept an optional argument for triggering the alert, which calls the new JSX logic. [commit: 453620e]
 - [ ] Task: Update `BPSD_SceneProperties` in `__init__.py` to include `last_known_ps_dirty_state` (BoolProperty, not persistent to file).
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: State Persistence & Interop Foundation' (Protocol in workflow.md)
 
