@@ -158,7 +158,6 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                 synced_path = os.path.normpath(props.active_psd_path)
                 is_already_synced = (selected_path == synced_path)
 
-        sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
         
         row = sync_col.row(align=True)
         button_text = "Reload from disk" if is_already_synced else "Sync file"
@@ -166,6 +165,8 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         if is_already_synced:
             row.operator("bpsd.stop_sync", icon='X')
         row.enabled = is_valid
+        
+        sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
 
         row = sync_col.row(align=True)
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='UV_SYNC_SELECT' if props.auto_sync_incoming else 'CANCEL')
@@ -254,7 +255,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         #         break
         
         row.alert = props.ps_is_dirty or props.ps_disk_conflict
-        
+        warn = None
         if props.ps_is_dirty:
             warn = layout.column()
             row = warn.row(align=True)
@@ -262,7 +263,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
             row.label(text="Photoshop has unsaved changes!", icon='ERROR')
 
         if props.ps_disk_conflict:
-            if warn == None: warn = layout.column()
+            warn = layout.column()
             row = warn.row(align=True)
             row.alert = True
             row.label(text="Disk file changed! Save will overwrite.", icon='ERROR')
