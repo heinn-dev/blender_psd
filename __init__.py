@@ -489,9 +489,24 @@ def ps_status_check():
 
     # Only check if we are actually connected
     if props.active_psd_image != 'NONE':
-        is_dirty = ui_ops.is_photoshop_file_unsaved(path)
-        if is_dirty is not None:
-             props.ps_is_dirty = is_dirty
+        current_is_dirty = ui_ops.is_photoshop_file_unsaved(path)
+        
+        if current_is_dirty is not None:
+            # Check for conflict: Clean -> Dirty transition while Blender has changes
+            if current_is_dirty and not props.last_known_ps_dirty_state:
+                blender_is_dirty = False
+                for img in bpy.data.images:
+                    if img.get("bpsd_managed") and img.get("psd_path") == path and img.is_dirty:
+                        blender_is_dirty = True
+                        break
+                
+                if blender_is_dirty:
+                    print(f"BPSD: Conflict detected for {path}. Alerting Photoshop...")
+                    # Trigger the alert (fire and forget result, but it returns status too)
+                    ui_ops.is_photoshop_file_unsaved(path, trigger_alert=True)
+
+            props.ps_is_dirty = current_is_dirty
+            props.last_known_ps_dirty_state = current_is_dirty
 
     return 2.0
 

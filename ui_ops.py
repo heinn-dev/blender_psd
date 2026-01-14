@@ -157,16 +157,21 @@ def run_photoshop_refresh(target_psd_path):
     else:
         print("Linux is not supported for Photoshop interop.")
 
-def is_photoshop_file_unsaved(target_psd_path):
+def is_photoshop_file_unsaved(target_psd_path, trigger_alert=False):
     current_dir = os.path.join(os.path.dirname(__file__), "interop")
+    trigger_str = "TRUE" if trigger_alert else "FALSE"
 
     try:
         if sys.platform == 'win32':
             vbs_checker = os.path.join(current_dir, "check_status.vbs")
             if not os.path.exists(vbs_checker): return None
 
+            args = ["cscript", "//Nologo", vbs_checker, target_psd_path]
+            if trigger_alert:
+                args.append(trigger_str)
+
             result = subprocess.check_output(
-                ["cscript", "//Nologo", vbs_checker, target_psd_path],
+                args,
                 encoding='utf-8'
             )
             return "TRUE" in result.strip()
@@ -175,8 +180,12 @@ def is_photoshop_file_unsaved(target_psd_path):
             scpt_checker = os.path.join(current_dir, "check_status.scpt")
             if not os.path.exists(scpt_checker): return None
 
+            args = ["osascript", scpt_checker, target_psd_path]
+            if trigger_alert:
+                args.append(trigger_str)
+
             result = subprocess.check_output(
-                ["osascript", scpt_checker, target_psd_path],
+                args,
                 encoding='utf-8'
             )
             return "true" in result.lower()
