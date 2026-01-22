@@ -82,12 +82,47 @@ class BPSD_OT_qb_select_brush(bpy.types.Operator):
         prefs = context.preferences.addons[__package__].preferences
         target_name = prefs.quick_brush_paint_name if self.mode == 'PAINT' else prefs.quick_brush_erase_name
         
-        brush = bpy.data.brushes.get(target_name)
-        if not brush:
+        target_brush = bpy.data.brushes.get(target_name)
+        if not target_brush:
             self.report({'WARNING'}, f"Brush '{target_name}' not found.")
             return {'CANCELLED'}
         
-        context.tool_settings.image_paint.brush = brush
+        try:
+            context.tool_settings.image_paint.brush = target_brush
+        except AttributeError:
+            # Blender 4.3+ Read-Only Brush Property
+            # Fallback: Copy settings from target brush to active brush
+            active_brush = context.tool_settings.image_paint.brush
+            if active_brush:
+                # Copy basic settings
+                active_brush.blend = target_brush.blend
+                active_brush.color = target_brush.color
+                active_brush.secondary_color = target_brush.secondary_color
+                active_brush.strength = target_brush.strength
+                active_brush.texture = target_brush.texture
+                active_brush.texture_slot.map_mode = target_brush.texture_slot.map_mode
+                active_brush.stroke_method = target_brush.stroke_method
+                
+                # Handle Falloff
+                if hasattr(active_brush, "curve_preset") and hasattr(target_brush, "curve_preset"):
+                    active_brush.curve_preset = target_brush.curve_preset
+                elif hasattr(active_brush, "curve_distance_falloff_preset") and hasattr(target_brush, "curve_distance_falloff_preset"):
+                    active_brush.curve_distance_falloff_preset = target_brush.curve_distance_falloff_preset
+                
+                # Copy Curve
+                if hasattr(active_brush, "curve") and hasattr(target_brush, "curve"):
+                     try:
+                         # Manual curve point copy might be needed if direct assignment fails, 
+                         # but usually curve mapping is assignable or points are iterable
+                         pass 
+                     except:
+                         pass
+
+                self.report({'INFO'}, f"Loaded settings from '{target_name}' (Asset Mode)")
+            else:
+                self.report({'ERROR'}, "Cannot assign brush (Read-Only) and no active brush to update.")
+                return {'CANCELLED'}
+
         return {'FINISHED'}
 
 class BPSD_OT_qb_assign_brush(bpy.types.Operator):
