@@ -60,6 +60,56 @@ class BPSD_OT_qb_brush_set(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class BPSD_OT_qb_select_brush(bpy.types.Operator):
+    bl_idname = "bpsd.qb_select_brush"
+    bl_label = "Select Brush"
+    bl_description = "Select the assigned quick brush"
+
+    mode: bpy.props.EnumProperty(items=[('PAINT', "Paint", ""), ('ERASE', "Erase", "")]) # type: ignore
+
+    @classmethod
+    def poll(cls, context):
+        # Only allow if panel is visible (preference enabled) and in paint mode
+        if context.mode != 'PAINT_TEXTURE': return False
+        try:
+             prefs = context.preferences.addons[__package__].preferences
+             if not prefs.show_quick_brushes: return False
+        except:
+             return False
+        return True
+
+    def execute(self, context):
+        prefs = context.preferences.addons[__package__].preferences
+        target_name = prefs.quick_brush_paint_name if self.mode == 'PAINT' else prefs.quick_brush_erase_name
+        
+        brush = bpy.data.brushes.get(target_name)
+        if not brush:
+            self.report({'WARNING'}, f"Brush '{target_name}' not found.")
+            return {'CANCELLED'}
+        
+        context.tool_settings.image_paint.brush = brush
+        return {'FINISHED'}
+
+class BPSD_OT_qb_assign_brush(bpy.types.Operator):
+    bl_idname = "bpsd.qb_assign_brush"
+    bl_label = "Assign Brush"
+    bl_description = "Assign current brush to this slot"
+
+    mode: bpy.props.EnumProperty(items=[('PAINT', "Paint", ""), ('ERASE', "Erase", "")]) # type: ignore
+
+    def execute(self, context):
+        brush = context.tool_settings.image_paint.brush
+        if not brush: return {'CANCELLED'}
+        
+        prefs = context.preferences.addons[__package__].preferences
+        if self.mode == 'PAINT':
+            prefs.quick_brush_paint_name = brush.name
+        else:
+            prefs.quick_brush_erase_name = brush.name
+            
+        self.report({'INFO'}, f"Assigned '{brush.name}' to {self.mode}")
+        return {'FINISHED'}
+
 class BPSD_OT_toggle_frequent(bpy.types.Operator):
     bl_idname = "bpsd.toggle_frequent"
     bl_label = "Toggle Frequent"

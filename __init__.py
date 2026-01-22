@@ -280,6 +280,18 @@ class BPSDPreferences(bpy.types.AddonPreferences):
         default=True
     ) # type: ignore
 
+    quick_brush_paint_name: bpy.props.StringProperty(
+        name="Paint Brush",
+        description="Name of the brush to select for 'Paint'",
+        default="Paint Hard"
+    ) # type: ignore
+
+    quick_brush_erase_name: bpy.props.StringProperty(
+        name="Erase Brush",
+        description="Name of the brush to select for 'Erase'",
+        default="Erase Hard"
+    ) # type: ignore
+
     def draw(self, context):
         layout = self.layout
 
@@ -601,6 +613,8 @@ classes = (
     brush_ops.BPSD_OT_qb_brush_blend,
     brush_ops.BPSD_OT_qb_brush_falloff,
     brush_ops.BPSD_OT_qb_brush_set,
+    brush_ops.BPSD_OT_qb_select_brush,
+    brush_ops.BPSD_OT_qb_assign_brush,
     brush_ops.BPSD_OT_toggle_frequent,
     brush_panels.BPSD_PT_quick_brushes,
     panels.BPSD_PT_layer_context,
@@ -649,6 +663,21 @@ def register():
     bpy.app.timers.register(ps_status_check, persistent=True)
     bpy.app.handlers.load_post.append(bpsd_load_post_handler)
     bpy.app.handlers.save_pre.append(bpsd_save_pre_handler)
+    
+    # Register Keymaps
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon
+    if kc:
+        km = kc.keymaps.new(name='Image Paint', space_type='EMPTY', region_type='WINDOW')
+        kmi = km.keymap_items.new("bpsd.qb_select_brush", 'E', 'PRESS')
+        kmi.properties.mode = 'ERASE'
+        addon_keymaps.append((km, kmi))
+        
+        kmi = km.keymap_items.new("bpsd.qb_select_brush", 'B', 'PRESS')
+        kmi.properties.mode = 'PAINT'
+        addon_keymaps.append((km, kmi))
+
+addon_keymaps = []
 
 def unregister():
     if bpsd_load_post_handler in bpy.app.handlers.load_post:
@@ -657,6 +686,12 @@ def unregister():
         bpy.app.handlers.save_pre.remove(bpsd_save_pre_handler)
         
     del bpy.types.Scene.bpsd_props
+    
+    # Unregister Keymaps
+    for km, kmi in addon_keymaps:
+        km.keymap_items.remove(kmi)
+    addon_keymaps.clear()
+    
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
 
