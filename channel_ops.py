@@ -13,6 +13,13 @@ def ensure_temp_image(context, layer_item, width, height):
     else:
         if img.size[0] != width or img.size[1] != height:
             img.scale(width, height)
+    
+    # Tag for orphan cleanup
+    props = context.scene.bpsd_props
+    img["bpsd_managed"] = True
+    img["psd_path"] = props.active_psd_path
+    img["psd_layer_id"] = layer_item.layer_id
+    
     return img
 
 class BPSD_OT_edit_channels(bpy.types.Operator):
@@ -69,7 +76,10 @@ class BPSD_OT_edit_channels(bpy.types.Operator):
         item.temp_channel_active = True
         
         # Update Nodes
-        bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        try:
+            bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        except:
+            pass
         
         return {'FINISHED'}
 
@@ -90,7 +100,10 @@ class BPSD_OT_save_channels(bpy.types.Operator):
              self.report({'ERROR'}, "Missing images.")
              # Force reset state to avoid getting stuck
              item.temp_channel_active = False
-             bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+             try:
+                 bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+             except:
+                 pass
              return {'CANCELLED'}
              
         width = source_img.size[0]
@@ -117,14 +130,17 @@ class BPSD_OT_save_channels(bpy.types.Operator):
         
         source_img.pixels.foreach_set(source_arr.ravel())
         source_img.pack()
-        source_img.is_dirty = True
+        # source_img.is_dirty = True # Read-only
         
         # Cleanup
         item.temp_channel_active = False
         bpy.data.images.remove(temp_img)
         
         # Update Nodes
-        bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        try:
+            bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        except:
+            pass
         
         # Focus back
         ui_ops.focus_image_editor(context, source_img)
@@ -150,7 +166,10 @@ class BPSD_OT_cancel_channels(bpy.types.Operator):
             bpy.data.images.remove(temp_img)
             
         # Update Nodes
-        bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        try:
+            bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        except:
+            pass
         
         # Find original image
         source_img = ui_ops.find_loaded_image(props.active_psd_path, idx, False, item.layer_id)
