@@ -138,6 +138,7 @@ def draw_layer_panel(layout, props, item):
         layout.separator()
         box_ch = layout.box()
         row = box_ch.row(align=True)
+        row.enabled = not item.temp_channel_active
         row.scale_y = 0.8
         row.prop(item, "temp_channel_r", toggle=True)
         row.prop(item, "temp_channel_g", toggle=True)
