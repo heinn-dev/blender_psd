@@ -504,7 +504,24 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
                 continue
 
             if not self.force and not img.is_dirty:
-                continue
+                # Check if the associated item is marked dirty (e.g. from channel edit)
+                l_id = img.get("psd_layer_id", 0)
+                l_path = img.get("psd_layer_path")
+                item_is_dirty = False
+                
+                if l_id > 0:
+                     for item in props.layer_list:
+                         if item.layer_id == l_id:
+                             if item.is_property_dirty: item_is_dirty = True
+                             break
+                elif l_path:
+                     for item in props.layer_list:
+                         if item.path == l_path:
+                             if item.is_property_dirty: item_is_dirty = True
+                             break
+                
+                if not item_is_dirty:
+                    continue
 
             if not img.get("psd_layer_path"):
                 continue

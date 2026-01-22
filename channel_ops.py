@@ -152,6 +152,9 @@ class BPSD_OT_save_channels(bpy.types.Operator):
         source_img.pack()
         # source_img.is_dirty = True # Read-only
         
+        # Mark property dirty to trigger save pick-up
+        item.is_property_dirty = True
+        
         # Cleanup
         item.temp_channel_active = False
         bpy.data.images.remove(temp_img)
