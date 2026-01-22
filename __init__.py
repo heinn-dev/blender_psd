@@ -591,8 +591,8 @@ def ps_status_check():
 
 
 classes = (
-    BPSDPreferences,
     BPSD_BrushSettings,
+    BPSDPreferences,
     BPSD_LayerItem,
     BPSD_SceneProperties,
     BPSD_OT_connect_psd,
