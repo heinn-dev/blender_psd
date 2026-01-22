@@ -80,55 +80,38 @@ class BPSD_OT_qb_select_brush(bpy.types.Operator):
 
     def execute(self, context):
         prefs = context.preferences.addons[__package__].preferences
-        target_name = prefs.quick_brush_paint_name if self.mode == 'PAINT' else prefs.quick_brush_erase_name
+        slot = prefs.paint_slot if self.mode == 'PAINT' else prefs.erase_slot
         
-        target_brush = bpy.data.brushes.get(target_name)
-        if not target_brush:
-            self.report({'WARNING'}, f"Brush '{target_name}' not found.")
+        # Check if initialized (name is default) and set defaults if needed
+        # Actually, properties have defaults, so we just check if it feels "empty" or default
+        # But user might have set name to "Custom Brush" manually.
+        # Let's trust the slot.
+        
+        brush = context.tool_settings.image_paint.brush
+        if not brush:
+            self.report({'WARNING'}, "No active brush to update.")
             return {'CANCELLED'}
         
-        try:
-            context.tool_settings.image_paint.brush = target_brush
-        except AttributeError:
-            # Blender 4.3+ Read-Only Brush Property
-            # Fallback: Copy settings from target brush to active brush
-            active_brush = context.tool_settings.image_paint.brush
-            if active_brush:
-                # Copy basic settings
-                active_brush.blend = target_brush.blend
-                active_brush.color = target_brush.color
-                active_brush.secondary_color = target_brush.secondary_color
-                active_brush.strength = target_brush.strength
-                active_brush.texture = target_brush.texture
-                active_brush.texture_slot.map_mode = target_brush.texture_slot.map_mode
-                active_brush.stroke_method = target_brush.stroke_method
-                
-                # Handle Falloff
-                if hasattr(active_brush, "curve_preset") and hasattr(target_brush, "curve_preset"):
-                    active_brush.curve_preset = target_brush.curve_preset
-                elif hasattr(active_brush, "curve_distance_falloff_preset") and hasattr(target_brush, "curve_distance_falloff_preset"):
-                    active_brush.curve_distance_falloff_preset = target_brush.curve_distance_falloff_preset
-                
-                # Copy Curve
-                if hasattr(active_brush, "curve") and hasattr(target_brush, "curve"):
-                     try:
-                         # Manual curve point copy might be needed if direct assignment fails, 
-                         # but usually curve mapping is assignable or points are iterable
-                         pass 
-                     except:
-                         pass
-
-                self.report({'INFO'}, f"Loaded settings from '{target_name}' (Asset Mode)")
-            else:
-                self.report({'ERROR'}, "Cannot assign brush (Read-Only) and no active brush to update.")
-                return {'CANCELLED'}
-
+        # Apply settings
+        brush.blend = slot.blend
+        brush.strength = slot.strength
+        brush.color = slot.color
+        brush.secondary_color = slot.secondary_color
+        brush.use_alpha = slot.use_alpha
+        brush.stroke_method = slot.stroke_method
+        
+        if hasattr(brush, "curve_preset") and slot.curve_preset:
+            brush.curve_preset = slot.curve_preset
+        elif hasattr(brush, "curve_distance_falloff_preset") and slot.curve_preset:
+             brush.curve_distance_falloff_preset = slot.curve_preset
+             
+        self.report({'INFO'}, f"Applied '{slot.name}' settings")
         return {'FINISHED'}
 
 class BPSD_OT_qb_assign_brush(bpy.types.Operator):
     bl_idname = "bpsd.qb_assign_brush"
     bl_label = "Assign Brush"
-    bl_description = "Assign current brush to this slot"
+    bl_description = "Assign current brush settings to this slot"
 
     mode: bpy.props.EnumProperty(items=[('PAINT', "Paint", ""), ('ERASE', "Erase", "")]) # type: ignore
 
@@ -137,12 +120,23 @@ class BPSD_OT_qb_assign_brush(bpy.types.Operator):
         if not brush: return {'CANCELLED'}
         
         prefs = context.preferences.addons[__package__].preferences
-        if self.mode == 'PAINT':
-            prefs.quick_brush_paint_name = brush.name
-        else:
-            prefs.quick_brush_erase_name = brush.name
+        slot = prefs.paint_slot if self.mode == 'PAINT' else prefs.erase_slot
+        
+        slot.name = brush.name
+        slot.blend = brush.blend
+        slot.strength = brush.strength
+        slot.color = brush.color
+        slot.secondary_color = brush.secondary_color
+        slot.use_alpha = brush.use_alpha
+        slot.stroke_method = brush.stroke_method
+        
+        # Falloff
+        if hasattr(brush, "curve_preset"):
+             slot.curve_preset = brush.curve_preset
+        elif hasattr(brush, "curve_distance_falloff_preset"):
+             slot.curve_preset = brush.curve_distance_falloff_preset
             
-        self.report({'INFO'}, f"Assigned '{brush.name}' to {self.mode}")
+        self.report({'INFO'}, f"Saved settings to {self.mode} slot")
         return {'FINISHED'}
 
 class BPSD_OT_toggle_frequent(bpy.types.Operator):

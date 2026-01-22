@@ -179,7 +179,16 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
         default='PSD' # type: ignore
     )
 
-
+class BPSD_BrushSettings(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty(default="Custom Brush") # type: ignore
+    blend: bpy.props.StringProperty(default="MIX") # type: ignore
+    strength: bpy.props.FloatProperty(default=1.0, min=0.0, max=1.0) # type: ignore
+    color: bpy.props.FloatVectorProperty(subtype='COLOR', default=(1,1,1), size=3) # type: ignore
+    secondary_color: bpy.props.FloatVectorProperty(subtype='COLOR', default=(0,0,0), size=3) # type: ignore
+    curve_preset: bpy.props.StringProperty(default="SMOOTH") # type: ignore
+    stroke_method: bpy.props.StringProperty(default="SPACE") # type: ignore
+    use_alpha: bpy.props.BoolProperty(default=False) # type: ignore
+    
 class BPSD_SceneProperties(bpy.types.PropertyGroup):
     active_psd_path: bpy.props.StringProperty(name="PSD Path", subtype='FILE_PATH') # type: ignore
     layer_list: bpy.props.CollectionProperty(type=BPSD_LayerItem) # type: ignore
@@ -280,17 +289,8 @@ class BPSDPreferences(bpy.types.AddonPreferences):
         default=True
     ) # type: ignore
 
-    quick_brush_paint_name: bpy.props.StringProperty(
-        name="Paint Brush",
-        description="Name of the brush to select for 'Paint'",
-        default="Paint Hard"
-    ) # type: ignore
-
-    quick_brush_erase_name: bpy.props.StringProperty(
-        name="Erase Brush",
-        description="Name of the brush to select for 'Erase'",
-        default="Erase Hard"
-    ) # type: ignore
+    paint_slot: bpy.props.PointerProperty(type=BPSD_BrushSettings) # type: ignore
+    erase_slot: bpy.props.PointerProperty(type=BPSD_BrushSettings) # type: ignore
 
     def draw(self, context):
         layout = self.layout
@@ -592,6 +592,7 @@ def ps_status_check():
 
 classes = (
     BPSDPreferences,
+    BPSD_BrushSettings,
     BPSD_LayerItem,
     BPSD_SceneProperties,
     BPSD_OT_connect_psd,
@@ -664,6 +665,26 @@ def register():
     bpy.app.handlers.load_post.append(bpsd_load_post_handler)
     bpy.app.handlers.save_pre.append(bpsd_save_pre_handler)
     
+    # Initialize Default Brush Settings
+    try:
+        prefs = bpy.context.preferences.addons[__name__].preferences
+        # Check if "virgin" (default name is "Custom Brush")
+        if prefs.paint_slot.name == "Custom Brush":
+             prefs.paint_slot.name = "Paint Hard"
+             prefs.paint_slot.blend = "MIX"
+             prefs.paint_slot.strength = 1.0
+             prefs.paint_slot.curve_preset = "SMOOTH"
+             prefs.paint_slot.use_alpha = False
+             
+        if prefs.erase_slot.name == "Custom Brush":
+             prefs.erase_slot.name = "Erase Hard"
+             prefs.erase_slot.blend = "ERASE_ALPHA"
+             prefs.erase_slot.strength = 1.0
+             prefs.erase_slot.curve_preset = "CONSTANT"
+             prefs.erase_slot.use_alpha = True
+    except:
+        pass
+
     # Register Keymaps
     wm = bpy.context.window_manager
     kc = wm.keyconfigs.addon

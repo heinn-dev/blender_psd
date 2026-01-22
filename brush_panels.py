@@ -219,14 +219,14 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         
         # Erase Row
         row = layout.row(align=True)
-        op = row.operator("bpsd.qb_select_brush", text=f"Eraser ({prefs.quick_brush_erase_name})", icon='BRUSH_DATA')
+        op = row.operator("bpsd.qb_select_brush", text=f"Eraser ({prefs.erase_slot.name})", icon='BRUSH_DATA')
         op.mode = 'ERASE'
         op = row.operator("bpsd.qb_assign_brush", text="", icon='SOLO_ON')
         op.mode = 'ERASE'
         
         # Paint Row
         row = layout.row(align=True)
-        op = row.operator("bpsd.qb_select_brush", text=f"Brush ({prefs.quick_brush_paint_name})", icon='BRUSH_DATA')
+        op = row.operator("bpsd.qb_select_brush", text=f"Brush ({prefs.paint_slot.name})", icon='BRUSH_DATA')
         op.mode = 'PAINT'
         op = row.operator("bpsd.qb_assign_brush", text="", icon='SOLO_ON')
         op.mode = 'PAINT'
