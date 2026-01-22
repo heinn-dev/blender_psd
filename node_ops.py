@@ -828,5 +828,5 @@ class BPSD_OT_update_psd_nodes(bpy.types.Operator):
                              node.label = f"Mix {blender_mode}"
                              count += 1
 
-        self.report({'INFO'}, f"Updated {count} nodes.")
+        # self.report({'INFO'}, f"Updated {count} nodes.")
         return {'FINISHED'}
