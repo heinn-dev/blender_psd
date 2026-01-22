@@ -1,6 +1,6 @@
 About
 =========
-Experimental Blender (4.x, 5.x) add-on that allows you to seamlessly edit a PSD file's layers in Photoshop and Blender at the same time. Any changes you make in Blender will immediately sync with Photoshop upon hitting save, and similarly, hitting save in Photoshop will see your changes immediately reflected in Blender. 
+Experimental Blender (4.x, 5.x, only tested on 4.5 and 5.0) add-on that allows you to seamlessly edit a PSD file's layers in Photoshop and Blender at the same time. Any changes you make in Blender will immediately sync with Photoshop upon hitting save, and similarly, hitting save in Photoshop will see your changes immediately reflected in Blender. 
 There's also an approximate live preview of the PSD composite, among some features to make it easier to paint.
 
 <img width="305" height="901" alt="image" src="https://github.com/user-attachments/assets/31244df1-3739-485d-abc6-d1c6c4a8a53c" />
@@ -33,6 +33,7 @@ Note that pressing `Alt-S` to save the layer doesnt save the psd by default (you
 ⚠️ Warning ⚠️
 =========
 ⚠️ Text Layers (and other more niche types of layers) can't be loaded or saved yet! If you see a blank layer in your layer list (named "UNKNOWN"), do not save unless you really don't care about that layer. 
+
 ⚠️ Linked Layers are a bit funky. Ensure that the image is correctly linked in Photoshop, or the file wont load correctly.
 
 Thanks
