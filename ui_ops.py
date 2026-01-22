@@ -77,6 +77,7 @@ def get_psd_group_name(psd_path):
 
 def find_loaded_image(psd_path, layer_index, is_mask, layer_id=0):
     for img in bpy.data.images:
+        if img.get("bpsd_is_temp"): continue
         if img.get("psd_path") != psd_path: continue
         if img.get("psd_is_mask", False) != is_mask: continue
 

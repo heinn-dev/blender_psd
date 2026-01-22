@@ -17,6 +17,7 @@ def ensure_temp_image(context, layer_item, width, height):
     # Tag for orphan cleanup
     props = context.scene.bpsd_props
     img["bpsd_managed"] = True
+    img["bpsd_is_temp"] = True
     img["psd_path"] = props.active_psd_path
     img["psd_layer_id"] = layer_item.layer_id
     
