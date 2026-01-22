@@ -101,13 +101,14 @@ def draw_layer_item(layout, props, item, index, current_indent):
 
 def draw_layer_panel(layout, props, item):
     item = props.layer_list[props.active_layer_index]
-    box = layout.box()
 
     icon = get_icon(item.layer_type)
+    layout.label(text=f"{item.name}", icon=icon)
+    
+    box = layout.box()
     # row = box.row(align=True)
     # row.alignment = 'LEFT'
     # row = box.row()
-    # row.label(text=f"{item.name}", icon=icon)
     
     col = box.column()
     
@@ -134,9 +135,10 @@ def draw_layer_panel(layout, props, item):
     row.scale_y = 0.8
     
     # Channel Editing UI
-    if item.layer_type in {'LAYER', 'SMART'}:
-        layout.separator()
-        box_ch = layout.box()
+    if item.layer_type in {'LAYER'}:
+        # layout.separator()
+        # box_ch = layout.box()
+        box_ch = box.column();
         row = box_ch.row(align=True)
         row.enabled = not item.temp_channel_active
         row.scale_y = 0.8

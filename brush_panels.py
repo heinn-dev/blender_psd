@@ -7,6 +7,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = 'BPSD'
     bl_parent_id = "BPSD_PT_main_panel"
+    bl_options = {"DEFAULT_CLOSED"}
 
     @classmethod
     def poll(cls, context):
@@ -76,7 +77,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         col = layout.column(align=True)
         col.scale_y = 0.8
 
-        row = col.row(align=True)
+        row = col.box().row(align=True)
         for i, f_key in enumerate(self.falloff_map.keys()):
 
             data = self.falloff_map[f_key]
@@ -141,11 +142,15 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
             
             for i, (mode_key, cat_name) in enumerate(valid_items):
                 if i % 4 == 0:
+                    col.separator()
                     row = col.row(align=True)
                     row.alignment = "LEFT"
+                    
                 elif prev_cat is not None and cat_name != prev_cat:
                     if i % 4 != 3:
-                        row.separator()
+                        col.separator()
+                        row = col.row(align=True)
+                        row.alignment = "LEFT"
                 
                 prev_cat = cat_name
 
@@ -189,7 +194,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
                     op = sub.operator("bpsd.qb_brush_blend", text=display_text, icon=display_icon, depress=is_active)
                     op.blend_mode = mode_key
 
-                col.separator(factor=.5)
+                col.separator(factor=.25)
 
         layout.separator()
 
