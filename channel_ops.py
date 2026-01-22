@@ -56,16 +56,29 @@ class BPSD_OT_edit_channels(bpy.types.Operator):
         
         arr_reshaped = arr.reshape(-1, 4)
         
-        # Zero out unselected channels to allow clear editing?
-        # If I want to edit Red, I usually want to see what is already there in Red.
-        # But if G, B are unselected, maybe I should zero them so they don't distract?
-        if not item.temp_channel_r: arr_reshaped[:, 0] = 0
-        if not item.temp_channel_g: arr_reshaped[:, 1] = 0
-        if not item.temp_channel_b: arr_reshaped[:, 2] = 0
+        is_only_alpha = item.temp_channel_a and not (item.temp_channel_r or item.temp_channel_g or item.temp_channel_b)
+        is_only_rgb = not item.temp_channel_a and (item.temp_channel_r or item.temp_channel_g or item.temp_channel_b)
         
-        # Alpha handling: If A is unselected, we keep Source A so the image isn't invisible.
-        # If A IS selected, we keep Source A (to edit it).
-        # So A is always preserved from source initially.
+        if is_only_alpha:
+            # Alpha Mask Mode: Visualize Alpha as Grayscale, force opaque
+            # Copy Source Alpha to RGB
+            alpha_data = arr_reshaped[:, 3].copy()
+            arr_reshaped[:, 0] = alpha_data
+            arr_reshaped[:, 1] = alpha_data
+            arr_reshaped[:, 2] = alpha_data
+            arr_reshaped[:, 3] = 1.0
+        else:
+            # Zero out unselected channels to allow clear editing?
+            # If I want to edit Red, I usually want to see what is already there in Red.
+            # But if G, B are unselected, maybe I should zero them so they don't distract?
+            if not item.temp_channel_r: arr_reshaped[:, 0] = 0
+            if not item.temp_channel_g: arr_reshaped[:, 1] = 0
+            if not item.temp_channel_b: arr_reshaped[:, 2] = 0
+            
+            if is_only_rgb:
+                 # Force Opaque so alpha doesn't interfere with color editing
+                 arr_reshaped[:, 3] = 1.0
+            # Else (Mixed Mode): Keep Source Alpha (already in arr)
         
         temp_img.pixels.foreach_set(arr.ravel())
         temp_img.pack() 
@@ -123,11 +136,17 @@ class BPSD_OT_save_channels(bpy.types.Operator):
         temp_img.pixels.foreach_get(temp_arr)
         temp_reshaped = temp_arr.reshape(-1, 4)
         
-        # Write back selected channels
-        if item.temp_channel_r: source_reshaped[:, 0] = temp_reshaped[:, 0]
-        if item.temp_channel_g: source_reshaped[:, 1] = temp_reshaped[:, 1]
-        if item.temp_channel_b: source_reshaped[:, 2] = temp_reshaped[:, 2]
-        if item.temp_channel_a: source_reshaped[:, 3] = temp_reshaped[:, 3]
+        is_only_alpha = item.temp_channel_a and not (item.temp_channel_r or item.temp_channel_g or item.temp_channel_b)
+
+        if is_only_alpha:
+             # Read from Temp Red (visual representation of alpha) -> Write to Source A
+             source_reshaped[:, 3] = temp_reshaped[:, 0] 
+        else:
+            # Write back selected channels
+            if item.temp_channel_r: source_reshaped[:, 0] = temp_reshaped[:, 0]
+            if item.temp_channel_g: source_reshaped[:, 1] = temp_reshaped[:, 1]
+            if item.temp_channel_b: source_reshaped[:, 2] = temp_reshaped[:, 2]
+            if item.temp_channel_a: source_reshaped[:, 3] = temp_reshaped[:, 3]
         
         source_img.pixels.foreach_set(source_arr.ravel())
         source_img.pack()
