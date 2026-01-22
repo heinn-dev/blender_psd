@@ -20,6 +20,7 @@ from . import brush_ops
 from . import brush_panels
 from . import panels
 from . import node_ops
+from . import channel_ops
 
 class BPSD_LayerItem(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty() # type: ignore
@@ -33,6 +34,13 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     hidden_by_parent: bpy.props.BoolProperty(default=False) # type: ignore
     clip_base_index: bpy.props.IntProperty(default=-1) # type: ignore
     is_property_dirty: bpy.props.BoolProperty(default=False) # type: ignore
+
+    # Channel Editing Properties
+    temp_channel_active: bpy.props.BoolProperty(default=False) # type: ignore
+    temp_channel_r: bpy.props.BoolProperty(default=True, name="R") # type: ignore
+    temp_channel_g: bpy.props.BoolProperty(default=True, name="G") # type: ignore
+    temp_channel_b: bpy.props.BoolProperty(default=True, name="B") # type: ignore
+    temp_channel_a: bpy.props.BoolProperty(default=True, name="A") # type: ignore
 
     def update_blend_mode(self, context):
         if not context or not context.scene: return
@@ -542,6 +550,9 @@ classes = (
     node_ops.BPSD_OT_create_group_nodes,
     node_ops.BPSD_OT_create_psd_nodes,
     node_ops.BPSD_OT_update_psd_nodes,
+    channel_ops.BPSD_OT_edit_channels,
+    channel_ops.BPSD_OT_save_channels,
+    channel_ops.BPSD_OT_cancel_channels,
 )
 
 @persistent

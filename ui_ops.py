@@ -218,7 +218,12 @@ class BPSD_OT_select_layer(bpy.types.Operator):
         if item and item.layer_type == 'SMART' and not self.is_mask:
             self.report({'WARNING'}, "Smart Object layers cannot be saved back to the PSD")
 
-        existing_img = find_loaded_image(props.active_psd_path, self.index, self.is_mask, self.layer_id)
+        existing_img = None
+        if item and getattr(item, "temp_channel_active", False) and not self.is_mask:
+             existing_img = bpy.data.images.get(f"Temp_LayerID_{item.layer_id}")
+
+        if not existing_img:
+            existing_img = find_loaded_image(props.active_psd_path, self.index, self.is_mask, self.layer_id)
 
         if existing_img:
             focus_image_editor(context, existing_img)

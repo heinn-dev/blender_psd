@@ -133,6 +133,26 @@ def draw_layer_panel(layout, props, item):
     row.prop(item, "opacity", text="Opacity", slider=True)
     row.scale_y = 0.8
     
+    # Channel Editing UI
+    if item.layer_type in {'LAYER', 'SMART'}:
+        layout.separator()
+        box_ch = layout.box()
+        row = box_ch.row(align=True)
+        row.scale_y = 0.8
+        row.prop(item, "temp_channel_r", toggle=True)
+        row.prop(item, "temp_channel_g", toggle=True)
+        row.prop(item, "temp_channel_b", toggle=True)
+        row.prop(item, "temp_channel_a", toggle=True)
+        
+        row = box_ch.row()
+        if item.temp_channel_active:
+             row.alert = True
+             row.operator("bpsd.save_channels", text="Save Channels", icon='FILE_TICK')
+             row = box_ch.row()
+             row.operator("bpsd.cancel_channels", text="Cancel", icon='X')
+        else:
+             row.operator("bpsd.edit_channels", text="Edit Channels", icon='IMAGE_DATA')
+    
 
 class BPSD_PT_main_panel(bpy.types.Panel):
     bl_label = "Photoshop Sync"

@@ -760,6 +760,17 @@ class BPSD_OT_update_psd_nodes(bpy.types.Operator):
             if lid > 0 and lid in layer_map:
                 item = layer_map[lid]
 
+                if node.type == 'TEX_IMAGE' and node.label == "Layer Color":
+                     target_image = None
+                     if item.temp_channel_active:
+                         target_image = bpy.data.images.get(f"Temp_LayerID_{item.layer_id}")
+                     else:
+                         target_image = ui_ops.find_loaded_image(props.active_psd_path, -1, False, item.layer_id)
+                     
+                     if target_image and node.image != target_image:
+                         node.image = target_image
+                         count += 1
+
                 if node.type == 'FRAME':
                     if node.label != item.name:
                         node.label = item.name

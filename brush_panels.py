@@ -189,7 +189,7 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
                     op = sub.operator("bpsd.qb_brush_blend", text=display_text, icon=display_icon, depress=is_active)
                     op.blend_mode = mode_key
 
-                # col.separator(factor=.5)
+                col.separator(factor=.5)
 
         layout.separator()
 
