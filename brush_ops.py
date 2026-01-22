@@ -34,10 +34,12 @@ class BPSD_OT_qb_brush_falloff(bpy.types.Operator):
             brush = context.tool_settings.sculpt.brush
 
         if brush:
-            if hasattr(brush, "curve_preset"):
-                brush.curve_preset = self.falloff_mode
-            elif hasattr(brush, "curve_distance_falloff_preset"):
-                 brush.curve_distance_falloff_preset = self.falloff_mode
+            if bpy.app.version < (5, 0, 0):
+                if hasattr(brush, "curve_preset"):
+                    brush.curve_preset = self.falloff_mode
+            else:
+                 if hasattr(brush, "curve_distance_falloff_preset"):
+                     brush.curve_distance_falloff_preset = self.falloff_mode
 
         return {'FINISHED'}
 
@@ -100,10 +102,12 @@ class BPSD_OT_qb_select_brush(bpy.types.Operator):
         brush.use_alpha = slot.use_alpha
         brush.stroke_method = slot.stroke_method
         
-        if hasattr(brush, "curve_preset") and slot.curve_preset:
-            brush.curve_preset = slot.curve_preset
-        elif hasattr(brush, "curve_distance_falloff_preset") and slot.curve_preset:
-             brush.curve_distance_falloff_preset = slot.curve_preset
+        if bpy.app.version < (5, 0, 0):
+            if slot.curve_preset and hasattr(brush, "curve_preset"):
+                brush.curve_preset = slot.curve_preset
+        else:
+             if slot.curve_preset and hasattr(brush, "curve_distance_falloff_preset"):
+                 brush.curve_distance_falloff_preset = slot.curve_preset
              
         self.report({'INFO'}, f"Applied '{slot.name}' settings")
         return {'FINISHED'}
@@ -131,10 +135,12 @@ class BPSD_OT_qb_assign_brush(bpy.types.Operator):
         slot.stroke_method = brush.stroke_method
         
         # Falloff
-        if hasattr(brush, "curve_preset"):
-             slot.curve_preset = brush.curve_preset
-        elif hasattr(brush, "curve_distance_falloff_preset"):
-             slot.curve_preset = brush.curve_distance_falloff_preset
+        if bpy.app.version < (5, 0, 0):
+             if hasattr(brush, "curve_preset"):
+                 slot.curve_preset = brush.curve_preset
+        else:
+             if hasattr(brush, "curve_distance_falloff_preset"):
+                 slot.curve_preset = brush.curve_distance_falloff_preset
             
         self.report({'INFO'}, f"Saved settings to {self.mode} slot")
         return {'FINISHED'}

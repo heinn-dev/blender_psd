@@ -80,8 +80,10 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
             data = self.falloff_map[f_key]
 
             brush = context.tool_settings.image_paint.brush
-            if hasattr(brush, "curve_preset"):
-                is_active = (brush.curve_preset == f_key)
+            if not brush: continue
+
+            if bpy.app.version < (5, 0, 0):
+                is_active = (getattr(brush, "curve_preset", "") == f_key)
             else:
                 # Blender 5.0+
                 is_active = (getattr(brush, "curve_distance_falloff_preset", "") == f_key)
@@ -215,18 +217,18 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         row.prop(settings, "use_occlude", text="Occlude", icon='XRAY')
         row.prop(brush, "use_alpha", text="Paint Alpha", icon='TEXTURE')
 
-        layout.separator()
+        # layout.separator()
         
         # Erase Row
         row = layout.row(align=True)
-        op = row.operator("bpsd.qb_select_brush", text=f"Eraser ({prefs.erase_slot.name})", icon='BRUSH_DATA')
+        op = row.operator("bpsd.qb_select_brush", text=f"Eraser", icon='BRUSH_DATA')
         op.mode = 'ERASE'
         op = row.operator("bpsd.qb_assign_brush", text="", icon='SOLO_ON')
         op.mode = 'ERASE'
         
         # Paint Row
-        row = layout.row(align=True)
-        op = row.operator("bpsd.qb_select_brush", text=f"Brush ({prefs.paint_slot.name})", icon='BRUSH_DATA')
+        # row = layout.row(align=True)
+        op = row.operator("bpsd.qb_select_brush", text=f"Brush", icon='BRUSH_DATA')
         op.mode = 'PAINT'
         op = row.operator("bpsd.qb_assign_brush", text="", icon='SOLO_ON')
         op.mode = 'PAINT'
