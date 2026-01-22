@@ -250,7 +250,7 @@ class BPSD_PT_main_panel(bpy.types.Panel):
                         is_preview = True
                     break
 
-        icon_toggle = 'HIDE_OFF' if is_preview else 'NODETREE'
+        icon_toggle = 'SHADING_TEXTURE' if is_preview else 'SHADING_RENDERED'
         row_hl.operator("bpsd.toggle_output_mode", text="", icon=icon_toggle, depress=is_preview)
 
 
