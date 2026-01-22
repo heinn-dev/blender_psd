@@ -165,7 +165,11 @@ def draw_layer_panel(layout, props, item):
              row = box_ch.row()
              row.operator("bpsd.cancel_channels", text="Cancel", icon='X')
         else:
-             row.operator("bpsd.edit_channels", text="Edit Channels", icon='IMAGE_DATA')
+             op_row = row.row()
+             all_selected = item.temp_channel_r and item.temp_channel_g and item.temp_channel_b and item.temp_channel_a
+             none_selected = not (item.temp_channel_r or item.temp_channel_g or item.temp_channel_b or item.temp_channel_a)
+             op_row.enabled = not (all_selected or none_selected)
+             op_row.operator("bpsd.edit_channels", text="Edit Channels", icon='IMAGE_DATA')
     
 
 class BPSD_PT_main_panel(bpy.types.Panel):
