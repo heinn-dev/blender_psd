@@ -42,6 +42,22 @@ def image_dirty_watcher():
         if not img.get("bpsd_managed"):
             continue
 
+        # Latch dirty state to layer item
+        if img.is_dirty:
+             l_id = img.get("psd_layer_id", 0)
+             l_path = img.get("psd_layer_path")
+             
+             if l_id > 0:
+                 for item in props.layer_list:
+                     if item.layer_id == l_id:
+                         item.is_bpsd_dirty = True
+                         break
+             elif l_path:
+                 for item in props.layer_list:
+                     if item.path == l_path:
+                         item.is_bpsd_dirty = True
+                         break
+
         current_dirty = img.is_dirty
         was_dirty = runtime_state.get_dirty(img.name)
         runtime_state.set_dirty(img.name, current_dirty)
@@ -399,6 +415,7 @@ def perform_save_images(context, psd_path, images, property_items=None):
                 for item in props.layer_list:
                     if item.layer_id == l_id:
                         item.is_property_dirty = False
+                        item.is_bpsd_dirty = False
 
         msg = "Saved to disk."
         status = {'FINISHED'}
@@ -504,7 +521,7 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
                 continue
 
             if not self.force and not img.is_dirty:
-                # Check if the associated item is marked dirty (e.g. from channel edit)
+                # Check if the associated item is marked dirty (e.g. from channel edit or latched paint)
                 l_id = img.get("psd_layer_id", 0)
                 l_path = img.get("psd_layer_path")
                 item_is_dirty = False
@@ -512,12 +529,12 @@ class BPSD_OT_save_all_layers(bpy.types.Operator):
                 if l_id > 0:
                      for item in props.layer_list:
                          if item.layer_id == l_id:
-                             if item.is_property_dirty: item_is_dirty = True
+                             if item.is_property_dirty or item.is_bpsd_dirty: item_is_dirty = True
                              break
                 elif l_path:
                      for item in props.layer_list:
                          if item.path == l_path:
-                             if item.is_property_dirty: item_is_dirty = True
+                             if item.is_property_dirty or item.is_bpsd_dirty: item_is_dirty = True
                              break
                 
                 if not item_is_dirty:

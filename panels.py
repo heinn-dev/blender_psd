@@ -51,16 +51,14 @@ def draw_layer_item(layout, props, item, index, current_indent):
     display_name = item.name
 
     # Check for dirty state
-    has_unsaved = False
-    img_c = ui_ops.find_loaded_image(props.active_psd_path, index, False, item.layer_id)
-    if img_c and img_c.is_dirty: has_unsaved = True
+    has_unsaved = item.is_property_dirty or item.is_bpsd_dirty
+    # img_c = ui_ops.find_loaded_image(props.active_psd_path, index, False, item.layer_id)
+    # if img_c and img_c.is_dirty: has_unsaved = True
 
     if not has_unsaved and item.has_mask:
         img_m = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
         if img_m and img_m.is_dirty: has_unsaved = True
         
-    has_unsaved = has_unsaved or item.is_property_dirty
-
     if has_unsaved:
         display_name += " *"
 

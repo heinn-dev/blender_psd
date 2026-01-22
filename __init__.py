@@ -34,6 +34,7 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     hidden_by_parent: bpy.props.BoolProperty(default=False) # type: ignore
     clip_base_index: bpy.props.IntProperty(default=-1) # type: ignore
     is_property_dirty: bpy.props.BoolProperty(default=False) # type: ignore
+    is_bpsd_dirty: bpy.props.BoolProperty(default=False) # type: ignore
 
     # Channel Editing Properties
     temp_channel_active: bpy.props.BoolProperty(default=False) # type: ignore
@@ -570,6 +571,14 @@ def bpsd_load_post_handler(dummy):
             props.last_known_mtime_str = "0.0"
             props.structure_signature = ""
 
+@persistent
+def bpsd_save_pre_handler(dummy):
+    # Auto-save layers to PSD before saving the .blend file
+    try:
+        bpy.ops.bpsd.save_all_layers('EXEC_DEFAULT')
+    except Exception as e:
+        print(f"BPSD Save Pre Error: {e}")
+
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
@@ -581,10 +590,14 @@ def register():
     bpy.app.timers.register(auto_sync_check, persistent=True)
     bpy.app.timers.register(ps_status_check, persistent=True)
     bpy.app.handlers.load_post.append(bpsd_load_post_handler)
+    bpy.app.handlers.save_pre.append(bpsd_save_pre_handler)
 
 def unregister():
     if bpsd_load_post_handler in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(bpsd_load_post_handler)
+    if bpsd_save_pre_handler in bpy.app.handlers.save_pre:
+        bpy.app.handlers.save_pre.remove(bpsd_save_pre_handler)
+        
     del bpy.types.Scene.bpsd_props
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
