@@ -292,6 +292,22 @@ def _get_layer_content(nodes, links, props, item, index, x, y, frame):
 
     if col_img:
         c_sock, a_sock = _get_socket_from_image(nodes, col_img, "Layer Color", x + 50, y, frame, item.layer_id)
+    elif item.layer_type == 'ADJUSTMENT':
+        rgb = nodes.new('ShaderNodeRGB')
+        rgb.outputs[0].default_value = (item.adj_vis_color[0], item.adj_vis_color[1], item.adj_vis_color[2], 1.0)
+        rgb.label = "Adj Color"
+        rgb.location = (x + 50, y)
+        rgb.parent = frame
+        if item.layer_id > 0: rgb["bpsd_layer_id"] = item.layer_id
+        c_sock = rgb.outputs[0]
+
+        val = nodes.new('ShaderNodeValue')
+        val.outputs[0].default_value = item.adj_vis_alpha
+        val.label = "Adj Alpha"
+        val.location = (x + 50, y - 100)
+        val.parent = frame
+        if item.layer_id > 0: val["bpsd_layer_id"] = item.layer_id
+        a_sock = val.outputs[0]
     else:
         rgb = nodes.new('ShaderNodeRGB')
         rgb.outputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
@@ -455,8 +471,10 @@ def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_l
         else:
             cursor_x += 1000
 
+    target_blend = base_item.adj_vis_blend_mode if base_item.layer_type == 'ADJUSTMENT' else base_item.blend_mode
+
     final_col, final_alp, final_fac = inline_mix_logic(
-        nodes, links, base_item.blend_mode, 1.0, True,
+        nodes, links, target_blend, 1.0, True,
         None, group_accum_col, group_accum_alp,
         current_col, current_alp,
         location=(cursor_x, y_loc), parent=frame,
@@ -774,6 +792,19 @@ class BPSD_OT_update_psd_nodes(bpy.types.Operator):
                 if node.type == 'FRAME':
                     if node.label != item.name:
                         node.label = item.name
+                
+                # Update Adjustment Visuals
+                if item.layer_type == 'ADJUSTMENT':
+                    if node.type == 'RGB' and node.label == "Adj Color":
+                        col = (item.adj_vis_color[0], item.adj_vis_color[1], item.adj_vis_color[2], 1.0)
+                        if node.outputs[0].default_value[:] != col:
+                            node.outputs[0].default_value = col
+                            count += 1
+                    
+                    if node.type == 'VALUE' and node.label == "Adj Alpha":
+                         if node.outputs[0].default_value != item.adj_vis_alpha:
+                             node.outputs[0].default_value = item.adj_vis_alpha
+                             count += 1
 
                 if node.type == 'MATH' and node.label == "* Opacity":
                      eff_opacity = item.opacity * (1.0 if get_effective_visibility(item) else 0.0)
@@ -789,7 +820,8 @@ class BPSD_OT_update_psd_nodes(bpy.types.Operator):
 
                 if node.type == 'MIX_RGB' or node.type == 'MIX':
                     if node.label.startswith("Mix "):
-                         blender_mode = get_blender_blend_mode(item.blend_mode)
+                         target_mode = item.adj_vis_blend_mode if item.layer_type == 'ADJUSTMENT' else item.blend_mode
+                         blender_mode = get_blender_blend_mode(target_mode)
 
                          if hasattr(node, "blend_type") and node.blend_type != blender_mode:
                              node.blend_type = blender_mode

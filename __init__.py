@@ -43,6 +43,65 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
     temp_channel_b: bpy.props.BoolProperty(default=True, name="B") # type: ignore
     temp_channel_a: bpy.props.BoolProperty(default=True, name="A") # type: ignore
 
+    def update_visuals(self, context):
+        if not context or not context.scene: return
+        props = context.scene.bpsd_props
+        if props.is_applying_update: return
+        
+        self.is_property_dirty = True
+        try:
+            bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
+        except:
+            pass
+
+    # Adjustment Layer Visualization Overrides
+    adj_vis_color: bpy.props.FloatVectorProperty(
+        name="Vis Color", subtype='COLOR', default=(1.0, 1.0, 1.0), min=0.0, max=1.0,
+        update=update_visuals
+    ) # type: ignore
+    adj_vis_alpha: bpy.props.FloatProperty(
+        name="Vis Alpha", default=0.0, min=0.0, max=1.0,
+        update=update_visuals
+    ) # type: ignore
+    
+    # We need to access get_blend_mode_items, but it's an instance method.
+    # We can use a shared function or just duplicate the items list for the prop, 
+    # but since EnumProperty items can be a function taking (self, context), we can use that.
+    
+    def get_adj_blend_mode_items(self, context):
+        return [
+            ('NORMAL', "Normal", ""),
+            ('MULTIPLY', "Multiply", ""),
+            ('SCREEN', "Screen", ""),
+            ('OVERLAY', "Overlay", ""),
+            ('DARKEN', "Darken", ""),
+            ('LIGHTEN', "Lighten", ""),
+            ('COLORDODGE', "Color Dodge", ""),
+            ('COLORBURN', "Color Burn", ""),
+            ('LINEARBURN', "Linear Burn", ""),
+            ('LINEARDODGE', "Linear Dodge (Add)", ""),
+            ('SOFTLIGHT', "Soft Light", ""),
+            ('HARDLIGHT', "Hard Light", ""),
+            ('VIVIDLIGHT', "Vivid Light", ""),
+            ('LINEARLIGHT', "Linear Light", ""),
+            ('PINLIGHT', "Pin Light", ""),
+            ('DIFFERENCE', "Difference", ""),
+            ('EXCLUSION', "Exclusion", ""),
+            ('SUBTRACT', "Subtract", ""),
+            ('DIVIDE', "Divide", ""),
+            ('HUE', "Hue", ""),
+            ('SATURATION', "Saturation", ""),
+            ('COLOR', "Color", ""),
+            ('LUMINOSITY', "Luminosity", ""),
+        ]
+
+    adj_vis_blend_mode: bpy.props.EnumProperty(
+        name="Vis Blend Mode",
+        items=get_adj_blend_mode_items,
+        default=0,
+        update=update_visuals
+    ) # type: ignore
+
     def update_blend_mode(self, context):
         if not context or not context.scene: return
         props = context.scene.bpsd_props

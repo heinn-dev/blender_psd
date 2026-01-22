@@ -115,7 +115,12 @@ def draw_layer_panel(layout, props, item):
     
     sub_row = row.row(align=True)
     sub_row.alignment = 'LEFT'
-    sub_row.prop(item, "blend_mode", text="")
+    
+    if item.layer_type == 'ADJUSTMENT':
+        sub_row.prop(item, "adj_vis_blend_mode", text="")
+    else:
+        sub_row.prop(item, "blend_mode", text="")
+        
     sub_row.separator()
     # sub_row.enabled = False
     
@@ -131,6 +136,14 @@ def draw_layer_panel(layout, props, item):
     # row.alignment = 'LEFT'
     row.prop(item, "opacity", text="Opacity", slider=True)
     row.scale_y = 0.8
+    
+    if item.layer_type == 'ADJUSTMENT':
+        col.separator()
+        box_adj = col.box()
+        box_adj.label(text="Adjustment Visualization")
+        row = box_adj.row()
+        row.prop(item, "adj_vis_color", text="")
+        row.prop(item, "adj_vis_alpha", text="Alpha", slider=True)
     
     # Channel Editing UI
     if item.layer_type in {'LAYER'}:
