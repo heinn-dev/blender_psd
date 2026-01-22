@@ -48,7 +48,6 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
         props = context.scene.bpsd_props
         if props.is_applying_update: return
         
-        self.is_property_dirty = True
         try:
             bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
         except:
