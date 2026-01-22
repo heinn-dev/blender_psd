@@ -13,9 +13,6 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
     def poll(cls, context):
         
         if context.mode != 'PAINT_TEXTURE': return False
-        
-        if bpy.app.version >= (5, 0, 0):
-            return False
 
         package_name = __package__
         try:
@@ -82,7 +79,12 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
 
             data = self.falloff_map[f_key]
 
-            is_active = (context.tool_settings.image_paint.brush.curve_preset == f_key)
+            brush = context.tool_settings.image_paint.brush
+            if hasattr(brush, "curve_preset"):
+                is_active = (brush.curve_preset == f_key)
+            else:
+                # Blender 5.0+
+                is_active = (getattr(brush, "curve_distance_falloff_preset", "") == f_key)
 
             op = row.operator("bpsd.qb_brush_falloff", text='', icon=data[1], depress=is_active)
             op.falloff_mode = f_key

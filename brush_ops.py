@@ -27,11 +27,17 @@ class BPSD_OT_qb_brush_falloff(bpy.types.Operator):
     falloff_mode: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
+        brush = None
         if context.image_paint_object:
-            context.tool_settings.image_paint.brush.curve_preset = self.falloff_mode
-
+            brush = context.tool_settings.image_paint.brush
         elif context.sculpt_object:
-            context.tool_settings.sculpt.brush.curve_preset = self.falloff_mode
+            brush = context.tool_settings.sculpt.brush
+
+        if brush:
+            if hasattr(brush, "curve_preset"):
+                brush.curve_preset = self.falloff_mode
+            elif hasattr(brush, "curve_distance_falloff_preset"):
+                 brush.curve_distance_falloff_preset = self.falloff_mode
 
         return {'FINISHED'}
 
