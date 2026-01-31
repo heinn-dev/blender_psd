@@ -149,26 +149,20 @@ def focus_image_editor(context, image):
 
 def run_photoshop_refresh(target_psd_path):
     current_dir = os.path.join(os.path.dirname(__file__), "interop")
-    data_path = os.path.join(current_dir, "bpsd_target.txt")
-
-    try:
-        with open(data_path, "w", encoding="utf-8") as f:
-            f.write(target_psd_path)
-    except Exception as e:
-        print(f"BPSD Error: {e}")
-        return
 
     if sys.platform == 'win32':
         runner = os.path.join(current_dir, "silent_runner.vbs")
         jsx_script = os.path.join(current_dir, "refresh.jsx")
 
         if os.path.exists(runner):
-            subprocess.Popen(["wscript", runner, jsx_script])
+            # Pass both the script path and the target path as arguments
+            subprocess.Popen(["wscript", runner, jsx_script, target_psd_path])
 
     elif sys.platform == 'darwin':
         jsx_script = os.path.join(current_dir, "refresh.jsx")
 
-        cmd = f'tell application id "com.adobe.Photoshop" to do javascript file "{jsx_script}"'
+        # Pass target path as an argument array in ExtendScript
+        cmd = f'tell application id "com.adobe.Photoshop" to do javascript file "{jsx_script}" with arguments {{"{target_psd_path}"}}'
         subprocess.Popen(["osascript", "-e", cmd])
 
     else:
