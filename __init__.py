@@ -618,7 +618,7 @@ classes = (
     brush_ops.BPSD_OT_qb_assign_brush,
     brush_ops.BPSD_OT_toggle_frequent,
     brush_panels.BPSD_PT_quick_brushes,
-    panels.BPSD_PT_layer_context,
+    # panels.BPSD_PT_layer_context,
     node_ops.BPSD_OT_create_layer_node,
     node_ops.BPSD_OT_create_layer_frame,
     node_ops.BPSD_OT_create_group_nodes,

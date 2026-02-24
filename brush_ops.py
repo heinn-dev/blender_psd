@@ -99,7 +99,8 @@ class BPSD_OT_qb_select_brush(bpy.types.Operator):
         brush.strength = slot.strength
         brush.color = slot.color
         brush.secondary_color = slot.secondary_color
-        brush.use_alpha = slot.use_alpha
+        # heh, we don't really want this to be a per-brush thing
+        # brush.use_alpha = slot.use_alpha
         brush.stroke_method = slot.stroke_method
         
         if bpy.app.version < (5, 0, 0):
@@ -109,7 +110,6 @@ class BPSD_OT_qb_select_brush(bpy.types.Operator):
              if slot.curve_preset and hasattr(brush, "curve_distance_falloff_preset"):
                  brush.curve_distance_falloff_preset = slot.curve_preset
              
-        self.report({'INFO'}, f"Applied '{slot.name}' settings")
         return {'FINISHED'}
 
 class BPSD_OT_qb_assign_brush(bpy.types.Operator):
