@@ -688,15 +688,15 @@ def register():
     # Register Keymaps
     wm = bpy.context.window_manager
     kc = wm.keyconfigs.addon
-    if kc:
-        km = kc.keymaps.new(name='Image Paint', space_type='EMPTY', region_type='WINDOW')
-        kmi = km.keymap_items.new("bpsd.qb_select_brush", 'E', 'PRESS')
-        kmi.properties.mode = 'ERASE'
-        addon_keymaps.append((km, kmi))
+    # if kc:
+    #     km = kc.keymaps.new(name='Image Paint', space_type='EMPTY', region_type='WINDOW')
+    #     kmi = km.keymap_items.new("bpsd.qb_select_brush", 'E', 'PRESS')
+    #     kmi.properties.mode = 'ERASE'
+    #     addon_keymaps.append((km, kmi))
         
-        kmi = km.keymap_items.new("bpsd.qb_select_brush", 'B', 'PRESS')
-        kmi.properties.mode = 'PAINT'
-        addon_keymaps.append((km, kmi))
+    #     kmi = km.keymap_items.new("bpsd.qb_select_brush", 'B', 'PRESS')
+    #     kmi.properties.mode = 'PAINT'
+    #     addon_keymaps.append((km, kmi))
 
 addon_keymaps = []
 
