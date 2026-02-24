@@ -264,7 +264,7 @@ def get_interpolation_mode(props):
 def update_interpolation_callback(self, context):
     bpy.ops.bpsd.update_psd_nodes('EXEC_DEFAULT')
 
-def _get_socket_from_image(nodes, image, label, x, y, parent=None, layer_id=0):
+def _get_socket_from_image(nodes, links, image, label, x, y, parent=None, layer_id=0, uv_socket=None):
     if not image: return None, None
     t_node = nodes.new('ShaderNodeTexImage')
     t_node.image = image
@@ -279,6 +279,9 @@ def _get_socket_from_image(nodes, image, label, x, y, parent=None, layer_id=0):
     if parent: t_node.parent = parent
     if layer_id > 0: t_node["bpsd_layer_id"] = layer_id
 
+    if uv_socket:
+        links.new(uv_socket, t_node.inputs['Vector'])
+
     if label == "Layer Mask" or label == "Group Mask":
         if t_node.image: t_node.image.colorspace_settings.name = 'Non-Color'
         return t_node.outputs['Color'], None
@@ -286,12 +289,22 @@ def _get_socket_from_image(nodes, image, label, x, y, parent=None, layer_id=0):
         if t_node.image: t_node.image.colorspace_settings.name = 'sRGB'
         return t_node.outputs['Color'], t_node.outputs['Alpha']
 
-def _get_layer_content(nodes, links, props, item, index, x, y, frame):
+def _get_layer_content(nodes, links, props, item, index, x, y, frame, uv_socket=None):
     col_img = ui_ops.find_loaded_image(props.active_psd_path, index, False, item.layer_id)
     c_sock, a_sock = None, None
 
+    layer_uv_socket = uv_socket
+    if item.uv_override:
+        uv_map = nodes.new('ShaderNodeUVMap')
+        uv_map.uv_map = item.uv_override
+        uv_map.label = f"UV: {item.uv_override}"
+        uv_map.location = (x - 150, y - 150)
+        if frame: uv_map.parent = frame
+        if item.layer_id > 0: uv_map["bpsd_layer_id"] = item.layer_id
+        layer_uv_socket = uv_map.outputs['UV']
+
     if col_img:
-        c_sock, a_sock = _get_socket_from_image(nodes, col_img, "Layer Color", x + 50, y, frame, item.layer_id)
+        c_sock, a_sock = _get_socket_from_image(nodes, links, col_img, "Layer Color", x + 50, y, frame, item.layer_id, layer_uv_socket)
     elif item.layer_type == 'ADJUSTMENT':
         rgb = nodes.new('ShaderNodeRGB')
         rgb.outputs[0].default_value = (item.adj_vis_color[0], item.adj_vis_color[1], item.adj_vis_color[2], 1.0)
@@ -328,7 +341,7 @@ def _get_layer_content(nodes, links, props, item, index, x, y, frame):
     if item.has_mask:
         mask_img = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
         if mask_img:
-            m_sock, _ = _get_socket_from_image(nodes, mask_img, "Layer Mask", x + 50, y - 300, frame, item.layer_id)
+            m_sock, _ = _get_socket_from_image(nodes, links, mask_img, "Layer Mask", x + 50, y - 300, frame, item.layer_id, layer_uv_socket)
 
     return c_sock, a_sock, m_sock
 
@@ -344,7 +357,7 @@ def _create_item_frame(nodes, item, x, y):
 
 def _resolve_item_content(nodes, links, props, item, index, x, y, frame,
                           background_col=None, background_alp=None,
-                          inherited_mask=None, inherited_opacity_socket=None):
+                          inherited_mask=None, inherited_opacity_socket=None, uv_socket=None):
     col, alp, mask = None, None, None
     next_x = x
 
@@ -357,11 +370,21 @@ def _resolve_item_content(nodes, links, props, item, index, x, y, frame,
         rec_inherited_mask = None
         rec_inherited_opacity = None
 
+        group_uv_socket = uv_socket
+        if item.uv_override:
+            uv_map = nodes.new('ShaderNodeUVMap')
+            uv_map.uv_map = item.uv_override
+            uv_map.label = f"UV: {item.uv_override}"
+            uv_map.location = (x - 150, y - 150)
+            if frame: uv_map.parent = frame
+            if item.layer_id > 0: uv_map["bpsd_layer_id"] = item.layer_id
+            group_uv_socket = uv_map.outputs['UV']
+
         group_mask_socket = None
         if item.has_mask:
             mask_img = ui_ops.find_loaded_image(props.active_psd_path, index, True, item.layer_id)
             if mask_img:
-                group_mask_socket, _ = _get_socket_from_image(nodes, mask_img, "Group Mask", x + 50, y - 300, frame, item.layer_id)
+                group_mask_socket, _ = _get_socket_from_image(nodes, links, mask_img, "Group Mask", x + 50, y - 300, frame, item.layer_id, group_uv_socket)
 
         if is_passthrough:
             rec_inherited_mask = combine_masks(nodes, links, inherited_mask, group_mask_socket, x + 200, y - 400, frame, item.layer_id)
@@ -379,17 +402,18 @@ def _resolve_item_content(nodes, links, props, item, index, x, y, frame,
             rec_bg_col, rec_bg_alp,
             x + 300, y,
             inherited_mask=rec_inherited_mask,
-            inherited_opacity_socket=rec_inherited_opacity
+            inherited_opacity_socket=rec_inherited_opacity,
+            uv_socket=group_uv_socket
         )
         next_x = child_end_x + 200
 
     else:
-        col, alp, mask = _get_layer_content(nodes, links, props, item, index, x, y, frame)
+        col, alp, mask = _get_layer_content(nodes, links, props, item, index, x, y, frame, uv_socket)
 
     return col, alp, mask, next_x
 
 def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_layers, current_col, current_alp, x_loc, y_loc,
-                            inherited_mask=None, inherited_opacity_socket=None):
+                            inherited_mask=None, inherited_opacity_socket=None, uv_socket=None):
     cursor_x = x_loc
 
     frame = _create_item_frame(nodes, base_item, cursor_x, y_loc)
@@ -397,7 +421,8 @@ def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_l
     base_col, base_alp, base_mask, content_end_x = _resolve_item_content(
         nodes, links, props, base_item, base_idx, cursor_x, y_loc, frame,
         background_col=current_col, background_alp=current_alp,
-        inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket
+        inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket,
+        uv_socket=uv_socket
     )
 
     if base_item.layer_type == 'GROUP':
@@ -437,7 +462,8 @@ def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_l
 
         c_col, c_alp, c_mask, c_end_x = _resolve_item_content(
             nodes, links, props, clip_item, clip_idx, cursor_x, y_loc + 100, c_frame,
-            inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket
+            inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket,
+            uv_socket=uv_socket
         )
 
         if clip_item.layer_type == 'GROUP':
@@ -485,7 +511,7 @@ def _process_composite_unit(nodes, links, props, base_item, base_idx, clipping_l
 
 
 def build_hierarchy_recursive(nodes, links, props, parent_index, bottom_color_socket, bottom_alpha_socket, x_loc, y_loc,
-                              inherited_mask=None, inherited_opacity_socket=None):
+                              inherited_mask=None, inherited_opacity_socket=None, uv_socket=None):
     children = get_immediate_children(props.layer_list, parent_index)
     reversed_children = list(reversed(children))
 
@@ -514,7 +540,8 @@ def build_hierarchy_recursive(nodes, links, props, parent_index, bottom_color_so
         current_col, current_alp, cursor_x = _process_composite_unit(
             nodes, links, props, item, idx, clipping_layers,
             current_col, current_alp, cursor_x, y_loc,
-            inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket
+            inherited_mask=inherited_mask, inherited_opacity_socket=inherited_opacity_socket,
+            uv_socket=uv_socket
         )
 
     return current_col, current_alp, cursor_x
@@ -550,6 +577,7 @@ class BPSD_OT_create_psd_nodes(bpy.types.Operator):
              ng.interface.clear()
         else:
              ng = bpy.data.node_groups.new(name=group_name, type='ShaderNodeTree')
+        ng.interface.new_socket(name="UV", in_out='INPUT', socket_type='NodeSocketVector')
         ng.interface.new_socket(name="Out Color", in_out='OUTPUT', socket_type='NodeSocketColor')
         ng.interface.new_socket(name="Out Alpha", in_out='OUTPUT', socket_type='NodeSocketFloat')
         ng.interface.new_socket(name="Out Shader", in_out='OUTPUT', socket_type='NodeSocketShader')
@@ -559,13 +587,19 @@ class BPSD_OT_create_psd_nodes(bpy.types.Operator):
         nodes = ng.nodes
         links = ng.links
 
+        input_node = nodes.new('NodeGroupInput')
+        input_node.location = (-700, 0)
+
         output_node = nodes.new('NodeGroupOutput')
         output_node.location = (2000, 0)
+
+        uv_socket = input_node.outputs['UV']
 
         final_col, final_alp, end_x = build_hierarchy_recursive(
             nodes, links, props, -1,
             None, None,
-            -500, 0
+            -500, 0,
+            uv_socket=uv_socket
         )
 
         if final_col is None:
@@ -643,6 +677,27 @@ class BPSD_OT_create_psd_nodes(bpy.types.Operator):
             root_node.label = "PSD Output"
             root_node.select = True
             mat.node_tree.nodes.active = root_node
+
+            uv_node = None
+            for n in mat.node_tree.nodes:
+                if n.type == 'UVMAP' and n.get("bpsd_uv_input"):
+                    uv_node = n
+                    break
+
+            if not uv_node:
+                uv_node = mat.node_tree.nodes.new('ShaderNodeUVMap')
+                uv_node["bpsd_uv_input"] = True
+                uv_node.location = (root_node.location.x - 300, root_node.location.y - 200)
+
+            if root_node.inputs.get('UV'):
+                existing_link = None
+                for link in mat.node_tree.links:
+                    if link.to_socket == root_node.inputs['UV']:
+                        existing_link = link
+                        break
+
+                if not existing_link:
+                    mat.node_tree.links.new(uv_node.outputs['UV'], root_node.inputs['UV'])
 
             mat_output = None
             for n in mat.node_tree.nodes:

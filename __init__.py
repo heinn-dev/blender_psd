@@ -179,6 +179,34 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
         default='PSD' # type: ignore
     )
 
+    def update_uv_override(self, context):
+        if not context or not context.scene: return
+        props = context.scene.bpsd_props
+        if props.is_applying_update: return
+
+        try:
+            bpy.ops.bpsd.create_psd_nodes('EXEC_DEFAULT')
+        except:
+            pass
+
+    def get_uv_map_items(self, context):
+        items = [('', "Default (Group Input)", "Use the UV input from the PSD node group")]
+
+        if context and context.active_object and context.active_object.type == 'MESH':
+            mesh = context.active_object.data
+            if hasattr(mesh, 'uv_layers'):
+                for uv_layer in mesh.uv_layers:
+                    items.append((uv_layer.name, uv_layer.name, f"Use UV map: {uv_layer.name}"))
+
+        return items
+
+    uv_override: bpy.props.EnumProperty(
+        name="UV Override",
+        description="UV map to use for this layer (empty = use group input)",
+        items=get_uv_map_items,
+        update=update_uv_override
+    ) # type: ignore
+
 class BPSD_SceneProperties(bpy.types.PropertyGroup):
     active_psd_path: bpy.props.StringProperty(name="PSD Path", subtype='FILE_PATH') # type: ignore
     layer_list: bpy.props.CollectionProperty(type=BPSD_LayerItem) # type: ignore

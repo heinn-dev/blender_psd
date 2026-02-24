@@ -136,7 +136,11 @@ def draw_layer_panel(layout, props, item):
     # row.alignment = 'LEFT'
     row.prop(item, "opacity", text="Opacity", slider=True)
     row.scale_y = 0.8
-    
+
+    row = col.row()
+    row.prop(item, "uv_override", text="UV Override")
+    row.scale_y = 0.8
+
     if item.layer_type == 'ADJUSTMENT':
         col.separator()
         box_adj = col.box()
