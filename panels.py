@@ -282,10 +282,11 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.prop(props, "use_closest_interpolation", text="", icon=icon_interp, toggle=True)
 
         row = layout.row(align=True)
-        
+
         row.operator("bpsd.save_all_layers", text="Save", icon='FILE_TICK')
         row.prop(props, "auto_save_on_image_save", text="", icon='FILE_REFRESH' if props.auto_save_on_image_save else 'FILE_TICK', toggle=True)
-        
+        row.prop(props, "auto_save_on_blend_save", text="", icon='FILE_BLEND' if props.auto_save_on_blend_save else 'FILE', toggle=True)
+
         # has_dirty_props = False
         # for item in props.layer_list:
         #     if item.is_property_dirty:

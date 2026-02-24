@@ -214,6 +214,12 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
         default=False
     ) # type: ignore
 
+    auto_save_on_blend_save: bpy.props.BoolProperty(
+        name="Auto-Save on Ctrl-S",
+        description="Automatically sync to PSD when saving the .blend file (Ctrl-S)",
+        default=True
+    ) # type: ignore
+
     use_closest_interpolation: bpy.props.BoolProperty(
         name="Interpolation",
         description="Use Closest interpolation for crisp pixels",
@@ -630,9 +636,13 @@ def bpsd_load_post_handler(dummy):
 
 @persistent
 def bpsd_save_pre_handler(dummy):
-    # Auto-save layers to PSD before saving the .blend file
     try:
-        bpy.ops.bpsd.save_all_layers('EXEC_DEFAULT')
+        for scene in bpy.data.scenes:
+            if hasattr(scene, 'bpsd_props'):
+                props = scene.bpsd_props
+                if props.auto_save_on_blend_save:
+                    bpy.ops.bpsd.save_all_layers('EXEC_DEFAULT')
+                    break
     except Exception as e:
         print(f"BPSD Save Pre Error: {e}")
 
