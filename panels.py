@@ -141,6 +141,13 @@ def draw_layer_panel(layout, props, item):
     row.prop(item, "uv_override", text="UV Override")
     row.scale_y = 0.8
 
+    row = col.row(align=True)
+    row.operator("bpsd.rename_layer", text="Rename", icon='GREASEPENCIL')
+    clip_text = "Remove Clipping" if item.is_clipping_mask else "Set Clipping"
+    clip_icon = 'UNLINKED' if item.is_clipping_mask else 'LINKED'
+    row.operator("bpsd.set_clipping_mask", text=clip_text, icon=clip_icon)
+    row.scale_y = 0.8
+
     if item.layer_type == 'ADJUSTMENT':
         col.separator()
         box_adj = col.box()
@@ -207,7 +214,9 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         if is_already_synced:
             row.operator("bpsd.stop_sync", icon='X')
         row.enabled = is_valid
-        
+
+        sync_col.operator("bpsd.create_psd", icon='FILE_NEW', text="Create New PSD")
+
         sync_col.label(text=f"Synced: {os.path.basename(props.active_psd_path)}", icon='CHECKMARK')
 
         row = sync_col.row(align=True)

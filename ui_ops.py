@@ -851,3 +851,126 @@ class BPSD_OT_debug_rw_test(bpy.types.Operator):
             import traceback
             traceback.print_exc()
             return {'CANCELLED'}
+
+class BPSD_OT_create_psd(bpy.types.Operator):
+    bl_idname = "bpsd.create_psd"
+    bl_label = "Create New PSD"
+    bl_description = "Create a new PSD file with one empty layer"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    filepath: bpy.props.StringProperty(subtype='FILE_PATH') # type: ignore
+    width: bpy.props.IntProperty(name="Width", default=1024, min=1, max=30000) # type: ignore
+    height: bpy.props.IntProperty(name="Height", default=1024, min=1, max=30000) # type: ignore
+
+    def execute(self, context):
+        if not self.filepath:
+            self.report({'ERROR'}, "No filepath specified")
+            return {'CANCELLED'}
+
+        if not self.filepath.endswith('.psd'):
+            self.filepath += '.psd'
+
+        if psd_engine.create_psd(self.filepath, self.width, self.height):
+            self.report({'INFO'}, f"Created PSD: {self.filepath}")
+
+            img = bpy.data.images.load(self.filepath, check_existing=True)
+            if img:
+                props = context.scene.bpsd_props
+                props.active_psd_image = img.name
+                bpy.ops.bpsd.connect_psd('EXEC_DEFAULT')
+
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, "Failed to create PSD")
+            return {'CANCELLED'}
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+class BPSD_OT_rename_layer(bpy.types.Operator):
+    bl_idname = "bpsd.rename_layer"
+    bl_label = "Rename Layer"
+    bl_description = "Rename the selected layer in the PSD file"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    new_name: bpy.props.StringProperty(name="New Name", default="") # type: ignore
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+
+        if props.active_layer_index < 0:
+            self.report({'ERROR'}, "No layer selected")
+            return {'CANCELLED'}
+
+        item = props.layer_list[props.active_layer_index]
+
+        if not self.new_name:
+            self.report({'ERROR'}, "Name cannot be empty")
+            return {'CANCELLED'}
+
+        if psd_engine.rename_layer(props.active_psd_path, item.layer_id, self.new_name):
+            self.report({'INFO'}, f"Renamed layer to: {self.new_name}")
+            bpy.ops.bpsd.connect_psd('EXEC_DEFAULT')
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, "Failed to rename layer")
+            return {'CANCELLED'}
+
+    def invoke(self, context, event):
+        props = context.scene.bpsd_props
+        if props.active_layer_index >= 0:
+            item = props.layer_list[props.active_layer_index]
+            self.new_name = item.name
+        return context.window_manager.invoke_props_dialog(self)
+
+class BPSD_OT_toggle_layer_visibility_psd(bpy.types.Operator):
+    bl_idname = "bpsd.toggle_layer_visibility_psd"
+    bl_label = "Toggle Layer Visibility in PSD"
+    bl_description = "Toggle layer visibility and save to PSD file"
+
+    layer_id: bpy.props.IntProperty() # type: ignore
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+
+        item = None
+        for layer_item in props.layer_list:
+            if layer_item.layer_id == self.layer_id:
+                item = layer_item
+                break
+
+        if not item:
+            return {'CANCELLED'}
+
+        new_visibility = not item.is_visible
+
+        if psd_engine.set_layer_visibility(props.active_psd_path, self.layer_id, new_visibility):
+            bpy.ops.bpsd.connect_psd('EXEC_DEFAULT')
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, "Failed to toggle visibility")
+            return {'CANCELLED'}
+
+class BPSD_OT_set_clipping_mask(bpy.types.Operator):
+    bl_idname = "bpsd.set_clipping_mask"
+    bl_label = "Toggle Clipping Mask"
+    bl_description = "Toggle whether this layer clips to the layer below"
+
+    def execute(self, context):
+        props = context.scene.bpsd_props
+
+        if props.active_layer_index < 0:
+            self.report({'ERROR'}, "No layer selected")
+            return {'CANCELLED'}
+
+        item = props.layer_list[props.active_layer_index]
+        new_clipping = not item.is_clipping_mask
+
+        if psd_engine.set_clipping_mask(props.active_psd_path, item.layer_id, new_clipping):
+            self.report({'INFO'}, f"Clipping mask: {new_clipping}")
+            bpy.ops.bpsd.connect_psd('EXEC_DEFAULT')
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, "Failed to set clipping mask")
+            return {'CANCELLED'}

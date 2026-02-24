@@ -628,6 +628,10 @@ classes = (
     ui_ops.BPSD_OT_toggle_visibility,
     ui_ops.BPSD_OT_load_all_layers,
     ui_ops.BPSD_OT_debug_rw_test,
+    ui_ops.BPSD_OT_create_psd,
+    ui_ops.BPSD_OT_rename_layer,
+    ui_ops.BPSD_OT_toggle_layer_visibility_psd,
+    ui_ops.BPSD_OT_set_clipping_mask,
 
     panels.BPSD_PT_main_panel,
 

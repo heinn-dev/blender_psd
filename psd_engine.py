@@ -407,3 +407,97 @@ def write_layer(psd_path, layer_path, blender_pixels, width, height, is_mask=Fal
         'layer_id': layer_id
     }
     return write_all_layers(psd_path, [update], width, height)
+
+def create_psd(path, width, height):
+    try:
+        color_mode = psapi.enum.ColorMode.rgb
+        document = psapi.LayeredFile_8bit(color_mode, width, height)
+
+        img_data = np.zeros((3, height, width), np.uint8)
+        img_data[0] = 255
+        img_data[1] = 255
+        img_data[2] = 255
+
+        img_layer = psapi.ImageLayer_8bit(img_data, "Layer 1", width=width, height=height)
+        document.add_layer(img_layer)
+
+        document.write(path)
+        return True
+    except Exception as e:
+        print(f"BPSD Create PSD Error: {e}")
+        return False
+
+def rename_layer(psd_path, layer_id, new_name):
+    try:
+        layered_file = psapi.LayeredFile.read(psd_path)
+
+        def find_and_rename(layer, target_id, new_name):
+            if layer.layer_id == target_id:
+                layer.name = new_name
+                return True
+
+            if hasattr(layer, 'layers'):
+                for child in layer.layers:
+                    if find_and_rename(child, target_id, new_name):
+                        return True
+            return False
+
+        for layer in layered_file.layers:
+            if find_and_rename(layer, layer_id, new_name):
+                layered_file.write(psd_path)
+                return True
+
+        return False
+    except Exception as e:
+        print(f"BPSD Rename Layer Error: {e}")
+        return False
+
+def set_layer_visibility(psd_path, layer_id, is_visible):
+    try:
+        layered_file = psapi.LayeredFile.read(psd_path)
+
+        def find_and_set_visibility(layer, target_id, visible):
+            if layer.layer_id == target_id:
+                layer.is_visible = visible
+                return True
+
+            if hasattr(layer, 'layers'):
+                for child in layer.layers:
+                    if find_and_set_visibility(child, target_id, visible):
+                        return True
+            return False
+
+        for layer in layered_file.layers:
+            if find_and_set_visibility(layer, layer_id, is_visible):
+                layered_file.write(psd_path)
+                return True
+
+        return False
+    except Exception as e:
+        print(f"BPSD Set Visibility Error: {e}")
+        return False
+
+def set_clipping_mask(psd_path, layer_id, is_clipping):
+    try:
+        layered_file = psapi.LayeredFile.read(psd_path)
+
+        def find_and_set_clipping(layer, target_id, clipping):
+            if layer.layer_id == target_id:
+                layer.clipping_mask = clipping
+                return True
+
+            if hasattr(layer, 'layers'):
+                for child in layer.layers:
+                    if find_and_set_clipping(child, target_id, clipping):
+                        return True
+            return False
+
+        for layer in layered_file.layers:
+            if find_and_set_clipping(layer, layer_id, is_clipping):
+                layered_file.write(psd_path)
+                return True
+
+        return False
+    except Exception as e:
+        print(f"BPSD Set Clipping Mask Error: {e}")
+        return False
