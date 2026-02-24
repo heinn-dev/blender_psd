@@ -216,19 +216,3 @@ class BPSD_PT_quick_brushes(bpy.types.Panel):
         row.prop(settings, "use_backface_culling", text="Backface", icon='MOD_SOLIDIFY')
         row.prop(settings, "use_occlude", text="Occlude", icon='XRAY')
         row.prop(brush, "use_alpha", text="Paint Alpha", icon='TEXTURE')
-
-        # layout.separator()
-        
-        # Erase Row
-        row = layout.row(align=True)
-        op = row.operator("bpsd.qb_select_brush", text=f"Eraser", icon='BRUSH_DATA')
-        op.mode = 'ERASE'
-        op = row.operator("bpsd.qb_assign_brush", text="", icon='SOLO_ON')
-        op.mode = 'ERASE'
-        
-        # Paint Row
-        # row = layout.row(align=True)
-        op = row.operator("bpsd.qb_select_brush", text=f"Brush", icon='BRUSH_DATA')
-        op.mode = 'PAINT'
-        op = row.operator("bpsd.qb_assign_brush", text="", icon='SOLO_ON')
-        op.mode = 'PAINT'

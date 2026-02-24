@@ -179,16 +179,6 @@ class BPSD_LayerItem(bpy.types.PropertyGroup):
         default='PSD' # type: ignore
     )
 
-class BPSD_BrushSettings(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(default="Custom Brush") # type: ignore
-    blend: bpy.props.StringProperty(default="MIX") # type: ignore
-    strength: bpy.props.FloatProperty(default=1.0, min=0.0, max=1.0) # type: ignore
-    color: bpy.props.FloatVectorProperty(subtype='COLOR', default=(1,1,1), size=3) # type: ignore
-    secondary_color: bpy.props.FloatVectorProperty(subtype='COLOR', default=(0,0,0), size=3) # type: ignore
-    curve_preset: bpy.props.StringProperty(default="SMOOTH") # type: ignore
-    stroke_method: bpy.props.StringProperty(default="SPACE") # type: ignore
-    use_alpha: bpy.props.BoolProperty(default=False) # type: ignore
-    
 class BPSD_SceneProperties(bpy.types.PropertyGroup):
     active_psd_path: bpy.props.StringProperty(name="PSD Path", subtype='FILE_PATH') # type: ignore
     layer_list: bpy.props.CollectionProperty(type=BPSD_LayerItem) # type: ignore
@@ -288,9 +278,6 @@ class BPSDPreferences(bpy.types.AddonPreferences):
         description="Enable the Quick Brushes panel in the 3D View",
         default=True
     ) # type: ignore
-
-    paint_slot: bpy.props.PointerProperty(type=BPSD_BrushSettings) # type: ignore
-    erase_slot: bpy.props.PointerProperty(type=BPSD_BrushSettings) # type: ignore
 
     def draw(self, context):
         layout = self.layout
@@ -591,7 +578,6 @@ def ps_status_check():
 
 
 classes = (
-    BPSD_BrushSettings,
     BPSDPreferences,
     BPSD_LayerItem,
     BPSD_SceneProperties,
@@ -614,8 +600,6 @@ classes = (
     brush_ops.BPSD_OT_qb_brush_blend,
     brush_ops.BPSD_OT_qb_brush_falloff,
     brush_ops.BPSD_OT_qb_brush_set,
-    brush_ops.BPSD_OT_qb_select_brush,
-    brush_ops.BPSD_OT_qb_assign_brush,
     brush_ops.BPSD_OT_toggle_frequent,
     brush_panels.BPSD_PT_quick_brushes,
     # panels.BPSD_PT_layer_context,
@@ -664,41 +648,6 @@ def register():
     bpy.app.timers.register(ps_status_check, persistent=True)
     bpy.app.handlers.load_post.append(bpsd_load_post_handler)
     bpy.app.handlers.save_pre.append(bpsd_save_pre_handler)
-    
-    # Initialize Default Brush Settings
-    try:
-        prefs = bpy.context.preferences.addons[__name__].preferences
-        # Check if "virgin" (default name is "Custom Brush")
-        if prefs.paint_slot.name == "Custom Brush":
-             prefs.paint_slot.name = "Paint Hard"
-             prefs.paint_slot.blend = "MIX"
-             prefs.paint_slot.strength = 1.0
-             prefs.paint_slot.curve_preset = "SMOOTH"
-             prefs.paint_slot.use_alpha = False
-             
-        if prefs.erase_slot.name == "Custom Brush":
-             prefs.erase_slot.name = "Erase Hard"
-             prefs.erase_slot.blend = "ERASE_ALPHA"
-             prefs.erase_slot.strength = 1.0
-             prefs.erase_slot.curve_preset = "CONSTANT"
-             prefs.erase_slot.use_alpha = True
-    except:
-        pass
-
-    # Register Keymaps
-    wm = bpy.context.window_manager
-    kc = wm.keyconfigs.addon
-    # if kc:
-    #     km = kc.keymaps.new(name='Image Paint', space_type='EMPTY', region_type='WINDOW')
-    #     kmi = km.keymap_items.new("bpsd.qb_select_brush", 'E', 'PRESS')
-    #     kmi.properties.mode = 'ERASE'
-    #     addon_keymaps.append((km, kmi))
-        
-    #     kmi = km.keymap_items.new("bpsd.qb_select_brush", 'B', 'PRESS')
-    #     kmi.properties.mode = 'PAINT'
-    #     addon_keymaps.append((km, kmi))
-
-addon_keymaps = []
 
 def unregister():
     if bpsd_load_post_handler in bpy.app.handlers.load_post:
@@ -707,12 +656,7 @@ def unregister():
         bpy.app.handlers.save_pre.remove(bpsd_save_pre_handler)
         
     del bpy.types.Scene.bpsd_props
-    
-    # Unregister Keymaps
-    for km, kmi in addon_keymaps:
-        km.keymap_items.remove(kmi)
-    addon_keymaps.clear()
-    
+
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
 

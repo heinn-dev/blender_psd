@@ -16,18 +16,20 @@ End If
 On Error Resume Next
     Set app = GetObject(, "Photoshop.Application")
     If Err.Number = 0 Then
-        
-        If alertTrigger Then
-             Set fso = CreateObject("Scripting.FileSystemObject")
-             scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
-             alertJsxPath = fso.BuildPath(scriptDir, "alert.jsx")
-             app.DoJavaScriptFile alertJsxPath
-        End If
 
+        ' First check if the target document is open and unsaved
         For Each doc In app.Documents
             If LCase(doc.FullName) = LCase(targetPath) Then
                 If Not doc.Saved Then
                     isUnsaved = "TRUE"
+
+                    ' Only trigger alert if this specific file is unsaved
+                    If alertTrigger Then
+                         Set fso = CreateObject("Scripting.FileSystemObject")
+                         scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
+                         alertJsxPath = fso.BuildPath(scriptDir, "alert.jsx")
+                         app.DoJavaScriptFile alertJsxPath
+                    End If
                 End If
                 Exit For
             End If
