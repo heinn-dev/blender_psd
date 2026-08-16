@@ -1,6 +1,7 @@
 import bpy
 import os
 from . import ui_ops
+from . import ps_bridge
 
 def get_icon(layer_type):
     match layer_type:
@@ -223,6 +224,14 @@ class BPSD_PT_main_panel(bpy.types.Panel):
         row.prop(props, "auto_sync_incoming", text="Sync from PS", icon='UV_SYNC_SELECT' if props.auto_sync_incoming else 'CANCEL')
         row.prop(props, "auto_refresh_ps", text="Sync to PS", icon='UV_SYNC_SELECT' if props.auto_refresh_ps else 'CANCEL')
         row.enabled = is_valid
+
+        row = sync_col.row(align=True)
+        row.prop(props, "use_ps_direct_sync", text="Direct Layer Sync",
+                 icon='LINKED' if props.use_ps_direct_sync else 'UNLINKED')
+        row.enabled = is_valid and ps_bridge.is_available()
+
+        if props.ps_sync_status:
+            sync_col.label(text=props.ps_sync_status)
 
 
         if not is_valid: return

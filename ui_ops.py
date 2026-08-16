@@ -4,6 +4,7 @@ import os
 import numpy as np
 import photoshopapi as psapi
 from . import psd_engine
+from . import ps_bridge
 import subprocess
 import time
 
@@ -311,6 +312,68 @@ class BPSD_OT_load_layer(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def _set_sync_status(scene, msg):
+    try:
+        scene.bpsd_props.ps_sync_status = msg
+    except (AttributeError, ReferenceError):
+        pass
+
+
+def finalize_save(scene, psd_path, image_names, prop_keys, reload_composite=False):
+    """Post-save bookkeeping shared by the direct-push and legacy paths.
+
+    Images are looked up by name rather than held as references, because the
+    direct-push path finishes from a timer and the datablocks may have gone
+    away in between.
+
+    Stamping the mtime is what keeps auto_sync_check quiet: without it the
+    save Photoshop just made looks like an incoming change and triggers a full
+    connect_psd re-parse plus a reload of every loaded layer.
+
+    reload_composite is set only on the push path. There Photoshop has already
+    written a fresh flattened composite, and since we skip the re-parse nothing
+    else would refresh Blender's preview of it. On the legacy path this runs
+    *before* Photoshop re-saves, so reloading would pull in the black composite
+    photoshopapi just wrote.
+    """
+    props = scene.bpsd_props
+
+    if os.path.exists(psd_path):
+        props.last_known_mtime_str = str(os.path.getmtime(psd_path))
+        props.ps_disk_conflict = False
+
+    if reload_composite and props.active_psd_image and props.active_psd_image != 'NONE':
+        composite = bpy.data.images.get(props.active_psd_image)
+        if composite:
+            try:
+                composite.reload()
+            except Exception as e:
+                print(f"BPSD: could not reload composite preview: {e}")
+
+    saved_ids = set()
+    for name in image_names:
+        img = bpy.data.images.get(name)
+        if not img:
+            continue
+
+        try:
+            img.pack()
+            runtime_state.set_dirty(img.name, False)
+        except Exception as e:
+            print(f"Error packing {name}: {e}")
+
+        l_id = img.get("psd_layer_id", 0)
+        if l_id > 0:
+            saved_ids.add(l_id)
+
+    for item in props.layer_list:
+        if item.layer_id > 0 and item.layer_id in saved_ids:
+            item.is_property_dirty = False
+            item.is_bpsd_dirty = False
+        elif (item.layer_id, item.path) in prop_keys:
+            item.is_property_dirty = False
+
+
 def perform_save_images(context, psd_path, images, property_items=None):
     props = context.scene.bpsd_props
 
@@ -344,15 +407,20 @@ def perform_save_images(context, psd_path, images, property_items=None):
             b_mode = item.blend_mode
             opac = item.opacity
 
+        width, height = img.size[0], img.size[1]
+        pixel_buf = np.empty(width * height * 4, dtype=np.float32)
+        img.pixels.foreach_get(pixel_buf)
+
         updates.append({
             'layer_path': layer_path,
-            'pixels': np.array(img.pixels),
-            'width': img.size[0],
-            'height': img.size[1],
+            'pixels': pixel_buf,
+            'width': width,
+            'height': height,
             'is_mask': is_mask,
             'layer_id': layer_id,
             'blend_mode': b_mode,
-            'opacity': opac
+            'opacity': opac,
+            'name': item.name if item else layer_path
         })
         valid_images.append(img)
     
@@ -385,46 +453,78 @@ def perform_save_images(context, psd_path, images, property_items=None):
     canvas_w = updates[0]['width']
     canvas_h = updates[0]['height']
 
-    success = psd_engine.write_all_layers(psd_path, updates, canvas_w, canvas_h)
+    scene = context.scene
+    image_names = [img.name for img in valid_images]
+    prop_keys = {(it.layer_id, it.path) for it in valid_prop_items}
 
-    if success:
-        if os.path.exists(psd_path):
-            props.last_known_mtime_str = str(os.path.getmtime(psd_path))
-            props.ps_disk_conflict = False
+    def run_legacy(skip_refresh=False):
+        """Rebuild the whole PSD with photoshopapi, then poke Photoshop."""
+        if not psd_engine.write_all_layers(psd_path, updates, canvas_w, canvas_h):
+            return {'CANCELLED'}, "Write failed."
 
-        for img in valid_images:
-            try:
-                img.pack()
-                runtime_state.set_dirty(img.name, False)
-            except Exception as e:
-                print(f"Error packing {img.name}: {e}")
-        
-        for item in valid_prop_items:
-            item.is_property_dirty = False
-        
-        # Also clear property dirty flag for items that were saved via image
-        for img in valid_images:
-            l_id = img.get("psd_layer_id", 0)
-            if l_id > 0:
-                for item in props.layer_list:
-                    if item.layer_id == l_id:
-                        item.is_property_dirty = False
-                        item.is_bpsd_dirty = False
+        finalize_save(scene, psd_path, image_names, prop_keys)
 
-        msg = "Saved to disk."
-        status = {'FINISHED'}
+        if skip_refresh:
+            return {'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS)."
 
-        if props.auto_refresh_ps:
+        # Re-read from the scene: on the fallback path this runs from a timer,
+        # long after the operator's context went away.
+        if scene.bpsd_props.auto_refresh_ps:
             if is_photoshop_file_unsaved(psd_path):
-                msg = "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS)."
-                status = {'WARNING'}
-            else:
-                run_photoshop_refresh(psd_path)
-                msg = "Saved & Refreshed Photoshop."
+                return {'WARNING'}, "Saved to disk, but Photoshop refresh skipped (Unsaved changes in PS)."
+            run_photoshop_refresh(psd_path)
+            return {'FINISHED'}, "Saved & Refreshed Photoshop."
 
-        return status, msg
+        return {'FINISHED'}, "Saved to disk."
 
-    return {'CANCELLED'}, "Write failed."
+    # Fast path: push only the changed layers into the open document and let
+    # Photoshop save. Blend mode and opacity still go through photoshopapi, so
+    # a pending property edit sends the whole save down the legacy path rather
+    # than splitting the write across two writers.
+    can_push = (
+        props.use_ps_direct_sync
+        and props.auto_refresh_ps
+        and not valid_prop_items
+        and all(u['pixels'] is not None for u in updates)
+        and ps_bridge.is_available()
+    )
+
+    if can_push:
+        job_dir = ps_bridge.push_updates(psd_path, updates, canvas_w, canvas_h)
+
+        if job_dir:
+            def on_done(result, reason):
+                if reason is None:
+                    finalize_save(scene, psd_path, image_names, prop_keys,
+                                  reload_composite=True)
+
+                    count = len(result.get('layers', []))
+                    msg = f"Synced {count} layer(s) to Photoshop."
+
+                    # Text and smart-object layers are deliberately left alone;
+                    # say so, or they look like they saved when they did not.
+                    skipped = result.get('skipped', [])
+                    if skipped:
+                        msg += f" Skipped {len(skipped)}: {', '.join(skipped)}"
+                        print(f"BPSD: skipped non-pixel layers: {skipped}")
+
+                    _set_sync_status(scene, msg)
+                    return
+
+                # Anything Photoshop could not do - not running, document not
+                # open, unsaved changes in PS - still has to reach disk, so fall
+                # back to writing the PSD from Blender.
+                print(f"BPSD Bridge: falling back ({reason})")
+                _, msg = run_legacy(skip_refresh=(reason == "ps_dirty"))
+                _set_sync_status(scene, msg)
+
+            ps_bridge.start_poll(job_dir, on_done)
+            _set_sync_status(scene, "Syncing to Photoshop...")
+            return {'FINISHED'}, "Syncing to Photoshop..."
+
+    status, msg = run_legacy()
+    _set_sync_status(scene, msg)
+    return status, msg
 
 
 class BPSD_OT_save_layer(bpy.types.Operator):

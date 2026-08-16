@@ -15,6 +15,7 @@ import bpy
 from bpy.app.handlers import persistent # type: ignore
 
 from . import psd_engine
+from . import ps_bridge
 from . import ui_ops
 from . import brush_ops
 from . import brush_panels
@@ -234,6 +235,23 @@ class BPSD_SceneProperties(bpy.types.PropertyGroup):
         name="Auto-Sync from Disk",
         description="Automatically reload textures when the PSD file is saved in Photoshop",
         default=True
+    ) # type: ignore
+
+    use_ps_direct_sync: bpy.props.BoolProperty(
+        name="Direct Layer Sync",
+        description=(
+            "Push only the changed layers into the open Photoshop document via the "
+            "BlenderPSD Sync plugin instead of rebuilding the whole PSD. Much faster, "
+            "keeps Photoshop's undo history, and leaves text layers untouched. "
+            "Falls back automatically when the plugin or the document is unavailable"
+        ),
+        default=True
+    ) # type: ignore
+
+    ps_sync_status: bpy.props.StringProperty(
+        name="Sync Status",
+        default="",
+        options={'SKIP_SAVE'}
     ) # type: ignore
 
     auto_save_on_image_save: bpy.props.BoolProperty(
@@ -520,6 +538,12 @@ def auto_sync_check():
     context = bpy.context
     if not context.scene: return 1.0
 
+    # A direct-sync job in flight means Photoshop is about to save the file on
+    # our behalf. That mtime bump is ours, not an incoming edit, so ignore it
+    # until the bridge stamps the new mtime itself.
+    if ps_bridge.job_in_flight():
+        return 0.5
+
     props = context.scene.bpsd_props
     path = props.active_psd_path
 
@@ -684,6 +708,7 @@ def register():
     bpy.types.Scene.bpsd_props = bpy.props.PointerProperty(type=BPSD_SceneProperties)
 
     ui_ops.init_dirty_cache()
+    ps_bridge.cleanup_stale()
 
     bpy.app.timers.register(ui_ops.image_dirty_watcher, persistent=True)
     bpy.app.timers.register(auto_sync_check, persistent=True)

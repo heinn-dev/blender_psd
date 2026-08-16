@@ -247,7 +247,8 @@ def read_all_layers(psd_path, requests):
 # --- WRITE LOGIC ---
 
 def _prepare_blender_pixels(blender_pixels, width, height):
-    pixels = np.array(blender_pixels).reshape((height, width, 4))
+    # asarray so an already-float32 buffer from foreach_get isn't copied again
+    pixels = np.asarray(blender_pixels, dtype=np.float32).reshape((height, width, 4))
     pixels = np.flipud(pixels)
     return (pixels * 255).astype(np.uint8)
 

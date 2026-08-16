@@ -30,6 +30,21 @@ Pressing `Save` or `Ctrl-S` will update your changes in the .psd and Photoshop, 
 
 Note that pressing `Alt-S` to save the layer doesnt save the psd by default (you can enable this by clicking the toggle next to the save button, but it is quite slow). 
 
+## Direct Layer Sync
+
+Previously, saving rebuilt the entire .psd in Blender and then made Photoshop close and reopen the document. That was slow on big files, threw away Photoshop's undo history, and is why text layers were risky.
+
+`Direct Layer Sync` (on by default, toggle in the BPSD sidebar) instead pushes only the layers you actually changed straight into the document Photoshop already has open, and lets Photoshop save. Per save that replaces two full PSD decodes and two full encodes with a single encode.
+
+What you get:
+- **Photoshop stops reloading the document.** Your undo history, zoom and active layer all survive; a sync appears as one `BlenderPSD Sync` step.
+- **Text layers and smart objects are safe.** Blender no longer rewrites the file, and non-pixel layers are skipped rather than touched. The sidebar tells you when a layer was skipped.
+- **Layer identity is preserved** - ids, blend modes, opacity, masks and layer effects are untouched.
+
+**Nothing to install.** It uses the same scripting bridge the addon already used, so there is no plugin, no Creative Cloud, and no Photoshop restart.
+
+If Photoshop isn't running, the document isn't open, Photoshop has unsaved changes, or you've changed a layer's blend mode or opacity, that save falls back to the old path automatically.
+
 ⚠️ Warning ⚠️
 =========
 ⚠️ Text Layers (and other more niche types of layers) can't be loaded or saved yet! If you see a blank layer in your layer list (named "UNKNOWN"), do not save unless you really don't care about that layer. 
