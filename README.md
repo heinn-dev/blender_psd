@@ -28,14 +28,7 @@ Note that for the psd to update after saves, Photoshop must be open (layers will
 ## Saving
 Pressing `Save` or `Ctrl-S` will update your changes in the .psd and Photoshop, if it is open. Only layers marked as dirty (`Layer*`) will be saved in the psd. You can force it to save every loaded layer by shift-clicking the `Save` button. 
 
-Note that pressing `Alt-S` to save the layer doesn't save the .psd by default (you can enable this by clicking the toggle next to the save button, but it is quite slow). 
-
-What you get:
-- **Photoshop stops reloading the document.** Your undo history, zoom and active layer all survive; a sync appears as one `BlenderPSD Sync` step.
-- **Text layers and smart objects are safe.** Blender no longer rewrites the file, and non-pixel layers are skipped rather than touched. The sidebar tells you when a layer was skipped.
-- **Layer identity is preserved** - ids, blend modes, opacity, masks and layer effects are untouched.
-
-If Photoshop isn't running, the document isn't open, Photoshop has unsaved changes, or you've changed a layer's blend mode or opacity, that save falls back to the old path automatically.
+Note that pressing `Alt-S` to save the layer doesn't save the .psd by default (you can enable this by clicking the toggle next to the save button, but it is slower). 
 
 ⚠️ Warning ⚠️
 =========
